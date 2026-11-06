@@ -1,0 +1,3 @@
+Pruebas sin hardware: sh test/run_host_tests.sh
+Los dobles en host/fakes solo se incluyen al compilar ese script.
+Procedimiento físico y limitaciones: ../README.md, sección Pruebas de banco pendientes.
