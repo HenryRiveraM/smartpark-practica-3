@@ -9,3 +9,14 @@
 /include/config.h
 # Configuracion local del editor
 .vscode/
+
+# Backend Lambda: entornos, artefactos y datos privados de vinculacion
+/lambda/.venv/
+/lambda/build/
+/lambda/dist/
+/lambda/.local/
+/lambda/.env
+/lambda/.env.*
+/lambda/**/__pycache__/
+/lambda/**/*.pyc
+/lambda/.coverage

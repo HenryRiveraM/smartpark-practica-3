@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "session": {
+    "new": false,
+    "sessionId": "test-session",
+    "application": {
+      "applicationId": "amzn1.ask.skill.00000000-0000-4000-8000-000000000000"
+    },
+    "user": {
+      "userId": "amzn1.ask.account.TEST_USER"
+    },
+    "attributes": {}
+  },
+  "context": {
+    "System": {
+      "application": {
+        "applicationId": "amzn1.ask.skill.00000000-0000-4000-8000-000000000000"
+      },
+      "user": {
+        "userId": "amzn1.ask.account.TEST_USER"
+      },
+      "device": {
+        "deviceId": "test-device",
+        "supportedInterfaces": {}
+      }
+    }
+  },
+  "request": {
+    "type": "SessionEndedRequest",
+    "requestId": "amzn1.echo-api.request.example-session-ended",
+    "timestamp": "2026-11-07T20:50:35.931529Z",
+    "locale": "es-ES",
+    "reason": "USER_INITIATED"
+  }
+}

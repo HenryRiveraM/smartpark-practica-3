@@ -1,0 +1,81 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:REEMPLAZAR_ACCOUNT_ID:table/SmartParkBindings",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": [
+            "amzn1.ask.account.*",
+            "PAIR#*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:REEMPLAZAR_ACCOUNT_ID:table/SmartParkBindings",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": [
+            "amzn1.ask.account.*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:DeleteItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:REEMPLAZAR_ACCOUNT_ID:table/SmartParkBindings",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": [
+            "amzn1.ask.account.*",
+            "PAIR#*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:UpdateItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:REEMPLAZAR_ACCOUNT_ID:table/SmartParkBindings",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": [
+            "PAIRUSER#*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iot:DescribeThing",
+        "iot:GetThingShadow",
+        "iot:UpdateThingShadow"
+      ],
+      "Resource": [
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:thing/REEMPLAZAR_THING_AUTORIZADO"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iot:DescribeEndpoint"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
