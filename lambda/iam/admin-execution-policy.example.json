@@ -1,0 +1,29 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:PutItem"
+      ],
+      "Resource": "arn:aws:dynamodb:us-east-1:REEMPLAZAR_ACCOUNT_ID:table/SmartParkBindings",
+      "Condition": {
+        "ForAllValues:StringLike": {
+          "dynamodb:LeadingKeys": [
+            "PAIR#*",
+            "PAIRUSER#*"
+          ]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iot:DescribeThing"
+      ],
+      "Resource": [
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:thing/REEMPLAZAR_THING_AUTORIZADO"
+      ]
+    }
+  ]
+}
