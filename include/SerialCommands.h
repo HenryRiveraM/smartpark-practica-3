@@ -32,7 +32,7 @@ public:
     }
 private:
     void reset() { length_ = 0; overflow_ = false; }
-    char buffer_[Config::COMMAND_CAPACITY]{};
+    char buffer_[COMMAND_CAPACITY]{};
     size_t length_ = 0;
     bool overflow_ = false;
 };

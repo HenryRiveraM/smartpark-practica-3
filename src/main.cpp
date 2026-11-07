@@ -47,7 +47,7 @@ void execute(SerialCommands::Command cmd) {
 }
 }
 void setup() {
-    Serial.begin(Config::SERIAL_BAUD);
+    Serial.begin(SERIAL_BAUD);
     sensor.begin();
     barrier.begin();
     lastSampleMs = millis();
@@ -58,11 +58,11 @@ void setup() {
 }
 void loop() {
     // Presupuesto por vuelta para no monopolizar el bucle con trafico Serial.
-    for (size_t i = 0; i < Config::SERIAL_BYTES_PER_LOOP && Serial.available() > 0; ++i)
+    for (size_t i = 0; i < SERIAL_BYTES_PER_LOOP && Serial.available() > 0; ++i)
         execute(commands.feed(static_cast<char>(Serial.read())));
     barrier.update();
     const uint32_t now = millis();
-    if (static_cast<uint32_t>(now - lastSampleMs) >= Config::SENSOR_INTERVAL_MS) {
+    if (static_cast<uint32_t>(now - lastSampleMs) >= SENSOR_INTERVAL_MS) {
         lastSampleMs = now;
         sensor.measure();
         printDistance();

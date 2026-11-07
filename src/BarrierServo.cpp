@@ -2,11 +2,11 @@
 #include "config.h"
 bool BarrierServo::begin() {
     if (initialized_) return true;
-    servo_.setPeriodHertz(Config::SERVO_FREQUENCY_HZ);
-    servo_.attach(Config::SERVO_PIN, Config::SERVO_MIN_US, Config::SERVO_MAX_US);
+    servo_.setPeriodHertz(SERVO_FREQUENCY_HZ);
+    servo_.attach(SERVO_PIN, SERVO_MIN_US, SERVO_MAX_US);
     initialized_ = servo_.attached();
     if (initialized_) {
-        servo_.write(Config::BARRIER_CLOSED_ANGLE);
+        servo_.write(BARRIER_CLOSED_ANGLE);
         commanded_ = State::Closed;
         commandTime_ = millis();
         moving_ = true;
@@ -15,7 +15,7 @@ bool BarrierServo::begin() {
 }
 bool BarrierServo::command(State state) {
     if (!initialized_ || state == commanded_) return false;
-    servo_.write(state == State::Open ? Config::BARRIER_OPEN_ANGLE : Config::BARRIER_CLOSED_ANGLE);
+    servo_.write(state == State::Open ? BARRIER_OPEN_ANGLE : BARRIER_CLOSED_ANGLE);
     commanded_ = state;
     commandTime_ = millis();
     moving_ = true;
@@ -24,6 +24,6 @@ bool BarrierServo::command(State state) {
 bool BarrierServo::open() { return command(State::Open); }
 bool BarrierServo::close() { return command(State::Closed); }
 void BarrierServo::update() {
-    if (moving_ && static_cast<uint32_t>(millis() - commandTime_) >= Config::SERVO_TRAVEL_MS)
+    if (moving_ && static_cast<uint32_t>(millis() - commandTime_) >= SERVO_TRAVEL_MS)
         moving_ = false;
 }

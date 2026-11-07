@@ -24,7 +24,8 @@ No alimentar el servo desde 3,3 V ni desde un GPIO. Dimensionar la fuente para l
 - `UltrasonicSensor`: inicialización, pulso, medida y presencia, sin referencia al servo. Cada resultado contiene validez y tiempo; la distancia solo es utilizable si el estado es `Valid`.
 - `BarrierServo`: interfaz `open()`, `close()`, `commandedState()`, `moving()` y `positionEstimated()`. `begin()` devuelve si se pudo asignar PWM, no si hay un servo conectado. Las órdenes repetidas no reenvían PWM ni reinician el temporizador. Una orden contraria durante un movimiento inicia una nueva estimación.
 - `SerialCommands`: parser con buffer fijo, sin asignación dinámica. `main.cpp` coordina tareas y presentación.
-- `include/secrets.h`: reservado para `Secrets::WIFI_SSID` y `Secrets::WIFI_PASSWORD`, ignorado por Git y sin uso en esta fase. En una copia nueva crear con `cp include/secrets.example.h include/secrets.h`. No introducir credenciales en otros archivos ni compartir este archivo.
+- `include/config.h` usa macros `#define` e incluye Wi-Fi, endpoint, nombre del Thing, topicos y tiempos de reconexion como configuracion futura; no activa conectividad. `THING_NAME` debe coincidir con el dispositivo registrado en AWS. Contiene datos locales de Wi-Fi: reemplazarlos por valores de ejemplo antes de publicar el archivo.
+- `include/secrets.h`: bloques PEM `AWS_ROOT_CA`, `AWS_DEVICE_CERT` y `AWS_PRIVATE_KEY` con `PROGMEM`, ignorado por Git y sin uso en esta fase. Los bloques vacios no son credenciales validas. En una copia nueva crear con `cp include/secrets.example.h include/secrets.h`. No compartir certificados privados ni claves.
 
 Dependencias fijadas: plataforma `espressif32@7.1.0` (Arduino ESP32 2.0.17) y [ESP32Servo 1.1.2](https://github.com/madhephaestus/ESP32Servo/tree/1.1.2), obtenida directamente de la etiqueta Git de GitHub porque el registro de PlatformIO no resuelve esa versión. Requiere Git instalado y acceso a GitHub. Compatible con esta generación de Arduino. PWM a 50 Hz con pulsos de 1000–2000 µs como punto de partida conservador; el ángulo real depende del servo y del montaje. No actualizar a otra versión mayor de la biblioteca sin verificar compatibilidad con el core Arduino.
 
@@ -87,7 +88,7 @@ No se ejecutaron pruebas físicas ni se cargó firmware a un dispositivo durante
 
 ## Próxima fase
 
-Agregar un servicio de conectividad que consulte la interfaz del sensor y ordene al servo. AWS IoT Core, MQTT, Device Shadow, Lambda, DynamoDB y Alexa quedan pendientes; esta fase no incluye certificados, red, pantalla, LEDs, segundo sensor, conteo ni apertura automática.
+Agregar un servicio de conectividad que consulte la interfaz del sensor y ordene al servo. AWS IoT Core, MQTT, Device Shadow, Lambda, DynamoDB y Alexa quedan pendientes; esta fase solo reserva la configuracion y plantillas PEM; no incluye conexion de red, pantalla, LEDs, segundo sensor, conteo ni apertura automática.
 
 ## Verificación de esta implementación
 
