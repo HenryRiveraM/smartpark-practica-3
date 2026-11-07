@@ -4,6 +4,7 @@
 #include <string>
 #include <deque>
 #include <array>
+#include <cstdio>
 constexpr int LOW=0, HIGH=1, INPUT=1, OUTPUT=2;
 namespace Fake {
 inline uint32_t now=0;
@@ -23,6 +24,7 @@ inline unsigned long pulseIn(int,int,unsigned long timeout) {
 struct FakeSerial {
     std::deque<char> input;
     std::string output;
+    template<class... T> void printf(const char* f, T... args) { char b[1024]; std::snprintf(b,sizeof(b),f,args...); output+=b; }
     void begin(uint32_t) {}
     int available() { return static_cast<int>(input.size()); }
     int read() { char c=input.front();input.pop_front();return c; }

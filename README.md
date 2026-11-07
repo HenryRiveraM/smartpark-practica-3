@@ -1,6 +1,6 @@
-# SmartPark — fase 1
+# SmartPark — fase 2
 
-Firmware Arduino/C++ para ESP32 DOIT DEVKIT V1, HC-SR04 y SG90. El sensor informa presencia; **solo los comandos Serial abren o cierran la barrera**. Al arrancar se ordena cerrar. No hay conexión Wi-Fi ni servicios cloud.
+Firmware ESP32 DOIT DEVKIT V1, HC-SR04 y SG90 con control Serial y AWS IoT Core mediante Shadow clásico. Thing `smartpark-grupo9-01`, región `us-east-1`, MQTT/TLS 8883. No se añadieron otros servicios AWS ni apertura automática.
 
 ## Hardware y conexiones
 
@@ -18,80 +18,69 @@ No conectar ECHO de 5 V directamente al ESP32. Usar un adaptador de nivel o divi
 
 No alimentar el servo desde 3,3 V ni desde un GPIO. Dimensionar la fuente para los picos del servo y mantener tierra común; evitar unir salidas de fuentes distintas o realimentar USB. Primero probar el servo sin varilla ni carga; calibrar para evitar topes, bloqueo y sobrecorriente. El programa no detecta obstáculos ni confirma posición: es una prueba de banco, no un controlador de seguridad para una barrera real.
 
-## Estructura y configuración
+## Configuración y compilación
 
-- `include/config.h`: pines, tiempos, umbrales, rango útil de 2–400 cm, PWM, ángulos y calibración. Ajustar `monitor_speed` en `platformio.ini` si cambia `SERIAL_BAUD`.
-- `UltrasonicSensor`: inicialización, pulso, medida y presencia, sin referencia al servo. Cada resultado contiene validez y tiempo; la distancia solo es utilizable si el estado es `Valid`.
-- `BarrierServo`: interfaz `open()`, `close()`, `commandedState()`, `moving()` y `positionEstimated()`. `begin()` devuelve si se pudo asignar PWM, no si hay un servo conectado. Las órdenes repetidas no reenvían PWM ni reinician el temporizador. Una orden contraria durante un movimiento inicia una nueva estimación.
-- `SerialCommands`: parser con buffer fijo, sin asignación dinámica. `main.cpp` coordina tareas y presentación.
-- `include/config.h` usa macros `#define` e incluye Wi-Fi, endpoint, nombre del Thing, topicos y tiempos de reconexion como configuracion futura; no activa conectividad. `THING_NAME` debe coincidir con el dispositivo registrado en AWS. Contiene datos locales de Wi-Fi: reemplazarlos por valores de ejemplo antes de publicar el archivo.
-- `include/secrets.h`: bloques PEM `AWS_ROOT_CA`, `AWS_DEVICE_CERT` y `AWS_PRIVATE_KEY` con `PROGMEM`, ignorado por Git y sin uso en esta fase. Los bloques vacios no son credenciales validas. En una copia nueva crear con `cp include/secrets.example.h include/secrets.h`. No compartir certificados privados ni claves.
+Se revisó y conservó la configuración local existente. Los valores de Wi-Fi se trasladaron de `config.h` a `secrets.h`, sin cambiar sus valores ni los PEM. Ambos archivos locales permanecen ignorados por Git.
 
-Dependencias fijadas: plataforma `espressif32@7.1.0` (Arduino ESP32 2.0.17) y [ESP32Servo 1.1.2](https://github.com/madhephaestus/ESP32Servo/tree/1.1.2), obtenida directamente de la etiqueta Git de GitHub porque el registro de PlatformIO no resuelve esa versión. Requiere Git instalado y acceso a GitHub. Compatible con esta generación de Arduino. PWM a 50 Hz con pulsos de 1000–2000 µs como punto de partida conservador; el ángulo real depende del servo y del montaje. No actualizar a otra versión mayor de la biblioteca sin verificar compatibilidad con el core Arduino.
-
-## Compilar, cargar y monitorizar
-
-Instalar PlatformIO Core o la extensión PlatformIO de VS Code. Desde la raíz:
+Para una copia nueva, copiar `include/config.example.h` a `include/config.h` y `include/secrets.example.h` a `include/secrets.h`; completar Wi-Fi y los tres PEM. Nunca reemplazar archivos locales ya configurados con las plantillas.
 
 ```sh
 pio run
-pio device list
-pio run -t upload --upload-port /dev/cu.usbserial-TU_PUERTO
-pio device monitor --port /dev/cu.usbserial-TU_PUERTO --baud 115200
-```
-
-Sustituir el puerto por el mostrado por `pio device list` (en Windows, por ejemplo `COM3`). Cerrar otros monitores antes de cargar. Si la placa no entra al bootloader, mantener BOOT durante el inicio de conexión de la carga y soltar al comenzar la escritura. También están disponibles las acciones Build, Upload y Monitor de PlatformIO. En este equipo el ejecutable existe en `~/.platformio/penv/bin/pio`, aunque no está en PATH.
-
-## Comandos Serial
-
-Enviar cada comando terminado en LF, CR o CRLF; se aceptan minúsculas y espacios exteriores.
-
-| Comando | Resultado |
-|---|---|
-| `OPEN` | Orden de apertura |
-| `CLOSE` | Orden de cierre |
-| `STATUS` | Última medida, edad, presencia, orden y movimiento estimado |
-| `DISTANCE` | Última medida y presencia; no fuerza una lectura |
-| `HELP` | Ayuda |
-
-Líneas desconocidas, con controles inválidos o de más de 31 caracteres se descartan. Una línea parcial espera su terminador sin bloquear otras tareas. Se procesan hasta 64 bytes por vuelta. No inundar el puerto: el buffer UART es finito.
-
-## Medición y estados
-
-La lectura ocurre cada 500 ms mediante diferencias sin signo de `millis()`, tolerando su desbordamiento. `pulseIn()` bloquea como máximo el timeout configurado (30 ms nominales), más pulso TRIG de 12 µs y sobrecarga. Esto puede retrasar comandos durante la medición. La salida Serial también puede esperar espacio en su buffer; no es un sistema de tiempo real estricto.
-
-Presencia: distancia ≤15 cm establece SI; distancia ≥18 cm establece NO. Entre ambos límites conserva el estado anterior. La primera lectura válida dentro de la banda, o una tras un fallo, establece NO hasta alcanzar ≤15 cm. Timeout o distancia fuera de rango producen DESCONOCIDO y nunca se imprimen como 0 cm ni activan una detección. La velocidad del sonido es una aproximación sin compensación térmica.
-
-Al arrancar o recibir una orden distinta se envía el ángulo y comienza una ventana estimada de 700 ms. Transcurrida esta ventana solo se estima que hubo tiempo para el movimiento. No hay realimentación de posición, detección de servo desconectado o atascado ni garantía de movimiento físico. Se mantiene PWM para sostener la posición. La presencia nunca envía órdenes al servo.
-
-## Pruebas sin hardware
-
-Con compilador C++17 del equipo:
-
-```sh
 sh test/run_host_tests.sh
+# Solo con ESP32 conectado y cableado revisado:
+pio run -t upload
+pio device monitor
 ```
 
-Compila los archivos reales del firmware contra dobles de Arduino/ESP32Servo en un directorio temporal. Comprueba inicialización y pulso del sensor, conversión, timeout, fuera de rango, detección, histéresis, fallo de asignación PWM, apertura/cierre, órdenes redundantes, duración estimada y desbordamiento temporal. También verifica parser (comandos, líneas parciales, CRLF, exceso de longitud y recuperación) y `setup()`/`loop()` con lecturas y comandos simultáneos, tráfico Serial acotado y ausencia de apertura por detección. Estos dobles verifican lógica, no comportamiento eléctrico ni temporización física. No requieren instalar las dependencias de PlatformIO.
+Las pruebas host requieren C++17 y ArduinoJson descargado por la compilación de PlatformIO. No necesitan el dispositivo, credenciales reales ni acceso a AWS. El script usa dobles para red, NVS, RTOS y hardware; el parser JSON y las clases del firmware son reales.
 
-## Pruebas de banco pendientes
+## Componentes y ahorro
 
-No se ejecutaron pruebas físicas ni se cargó firmware a un dispositivo durante esta implementación.
+- `UltrasonicSensor` y `BarrierServo` se preservan. `SerialCommands` conserva OPEN, CLOSE, STATUS, DISTANCE, HELP. Al arrancar se ordena cerrar, como en fase 1.
+- `AwsIoTManager` gestiona Wi-Fi, NTP, X.509, MQTT, suscripciones, comandos, confirmaciones, cuota y demo en una tarea FreeRTOS. Colas de una posición intercambian la última muestra y el último comando, sin backlog de lecturas/comandos obsoletos. Solo `loop()` toca el hardware. TLS/DNS/MQTT pueden esperar en su tarea, sin bloquear Serial; el sensor conserva su espera acotada de hasta 30 ms por lectura.
+- Cada 500 ms hay medida y salida Serial local. La histéresis original se conserva y AWS exige 3 muestras consecutivas para estabilizar presencia. Las variaciones de distancia inferiores a 5 cm respecto al último estado confirmado no disparan envíos.
+- Respaldo de 60 s desde el último UPDATE intentado. Los cambios relevantes se envían al estar conectados y sincronizados, con separación mínima de 5 s desde la última solicitud. No hay heartbeat de aplicación, publicaciones vacías, cola histórica ni envío de cada lectura. MQTT conserva su PING de protocolo con keepalive de 120 s.
+- Los cambios de barrera tienen prioridad y no esperan los 5 s ordinarios; esperan los 700 ms estimados por `BarrierServo`. Una confirmación de cambio ejecutado desplaza un informe pendiente con estado anterior; su reserva no se devuelve y su acuse tardío se ignora. No existe sensor que confirme la posición física. Se confirma únicamente la última posición estimada; órdenes opuestas intermedias se consolidan.
+- Solo se publica `state.reported`: barrera, distancia y presencia. Datos inválidos se envían como `null` para eliminar datos viejos del Shadow, no como cero o ausencia falsa. La presencia desconocida también se elimina.
+- Solo cinco suscripciones exactas: delta, GET accepted/rejected, UPDATE accepted/rejected. No se suscribe a `update/documents` ni a comodines. GET se solicita una vez tras conectar y enviar suscripciones; únicamente se repite en una nueva conexión/resincronización tras fallo. La semántica de temas está descrita en [AWS Device Shadow MQTT](https://docs.aws.amazon.com/iot/latest/developerguide/device-shadow-mqtt.html).
+- `clientToken` correlaciona respuestas propias y `version` descarta comandos atrasados. El estado confirmado avanza con UPDATE accepted, no al escribir TCP. PubSubClient publica QoS 0; el acuse de aplicación y el presupuesto cubren la incertidumbre, no garantizan entrega física.
 
-1. Revisar alimentación, tierra y adaptación de ECHO antes de conectar el ESP32. Con servo sin varilla, reiniciar y observar orden CERRADA y transición de movimiento estimado en `STATUS`; comprobar físicamente el cierre.
-2. Colocar superficies planas a 10, 20 y 100 cm; comparar medida con regla. A 10 cm debe indicar SI y a 20 cm NO, manteniendo siempre la barrera cerrada.
-3. Pasar de 12 a 16 a 20 a 16 a 12 cm: esperar SI, SI, NO, NO, SI. Esperar al menos una lectura entre posiciones.
-4. Sin blanco dentro del rango, o retirando ECHO con alimentación desconectada antes de modificar cables, comprobar timeout/presencia desconocida. Verificar que sigue aceptando `HELP` y órdenes.
-5. Enviar `OPEN`, esperar y comprobar desplazamiento físico; repetir `OPEN` y verificar que no se reinicia la estimación. Enviar `CLOSE`. Revisar ángulos y pulsos sin forzar topes.
-6. Probar `STATUS`, `DISTANCE`, `HELP`, minúsculas, CRLF, comandos inválidos, línea larga y comando parcial. Verificar recuperación con la siguiente línea válida.
-7. Mientras llegan medidas cada 500 ms, alternar `OPEN`/`CLOSE` y comprobar continuidad, estabilidad de alimentación y respuesta (con posible espera de la lectura ultrasónica). Probar órdenes opuestas antes de 700 ms.
+Todos los valores ajustables están en `config.h`; la plantilla pública contiene los valores iniciales solicitados. `AWS_DEMO_MAX_CONNECTED_MS=0` desactiva el límite de demo.
 
-## Próxima fase
+## Presupuesto persistente
 
-Agregar un servicio de conectividad que consulte la interfaz del sensor y ordene al servo. AWS IoT Core, MQTT, Device Shadow, Lambda, DynamoDB y Alexa quedan pendientes; esta fase solo reserva la configuracion y plantillas PEM; no incluye conexion de red, pantalla, LEDs, segundo sensor, conteo ni apertura automática.
+`ShadowBudget` cuenta cuatro categorías diarias UTC: periódicas, sensor, control y recuperación GET. El techo conservador de **200 incluye GET y UPDATE intentados**. Hasta 170 solicitudes totales se permiten informes ordinarios/GET; desde ahí solo controles, hasta 200. Así se preservan al menos 30 solicitudes de control. También consumen reserva la sincronización inicial de barrera y las confirmaciones de cambios Serial. Un comando ya confirmado no consume otra solicitud.
 
-## Verificación de esta implementación
+Cada reserva se escribe en un registro NVS antes de llamar a MQTT. Un fallo de envío, rechazo o respuesta perdida no devuelve cuota: el contador es una cota conservadora de intentos, no una medición de operaciones facturadas. La suma de periódicas+sensor+control es UPDATE; sumando GET se obtienen solicitudes totales.
 
-`sh test/run_host_tests.sh`: PASS, compilado con advertencias tratadas como errores.
+El registro guarda día UTC y categorías. Solo NTP con epoch válido habilita el presupuesto. El siguiente día UTC repone cuota mediante escritura persistente; un reinicio en el mismo día conserva el gasto. Retrocesos del reloj, registro corrupto y fallos NVS bloquean envíos. No hay comando de borrado de cuota. No borrar NVS ni usar `erase_flash` para repetir pruebas: eliminaría el historial local. Esta protección no resiste borrado externo ni manipulación de reloj/flash.
 
-Se intentó `pio run`: el directorio global de PlatformIO no permite escritura desde esta sesión. Se repitió con `PLATFORMIO_CORE_DIR=/tmp/smartpark-pio-core`, reutilizando los paquetes instalados; intentó instalar la dependencia ESP32Servo y terminó con `HTTPClientError` antes de descargarla. Una comprobación independiente devolvió fallo de resolución DNS. Por ello **la compilación y enlace para ESP32 no están verificados**; no se obtuvo un binario validado ni se realizó carga. Repetir `pio run` en un entorno con acceso al registro de PlatformIO y permisos de escritura en su directorio de paquetes.
+Con presupuesto ordinario agotado, una conexión existente sigue recibiendo comandos y usando la reserva. Si se desconecta, no reconecta sin presupuesto de GET: se prioriza resincronizar con seguridad sobre usar la reserva sin conocer el Shadow. Al llegar al techo total, el servo y Serial siguen activos, aunque no se pueda confirmar en AWS. NTP fallido impide TLS y las publicaciones; el control local sigue disponible.
+
+`STATUS` y el informe de 30 s muestran conectividad, último comando, categorías, UPDATE total, solicitudes totales, accepted/rejected de la sesión, reconexiones, omisiones, edad del último intento, día del presupuesto y estado de demo. Las lecturas imprimen distancia/presencia; STATUS añade barrera y movimiento estimado. “Omitidas” cuenta muestras sin cambios y decisiones pendientes bloqueadas por intervalo/cuota (estas últimas como máximo una vez por segundo); no representa ahorro monetario exacto. Accepted/rejected, omisiones y reconexiones son diagnósticos de sesión; solo los contadores de presupuesto persisten.
+
+## Recuperación y duración de pruebas
+
+No hay bucles de reconexión que esperen conectividad. Backoff exponencial desde 5 s, jitter y techo de 5 minutos; máximo configurable de 10 intentos por arranque, compartidos entre Wi-Fi/MQTT y pérdidas de conexión. Una conexión exitosa no repone ese contador, evitando ciclos ilimitados. Tras agotar intentos, reiniciar expresamente para otra prueba; la cuota NVS se conserva.
+
+GET sin respuesta tras 15 s provoca desconexión y recuperación con backoff. UPDATE sin respuesta permite hasta 3 intentos, contando cada uno; luego suspende informes. Un rechazo UPDATE o GET distinto de 404 suspende informes hasta reconectar: revisar política, documento y tamaño antes de reiniciar. GET 404 permite crear el Shadow con el primer reporte. El buffer MQTT inicial es 1024 bytes: un Shadow grande puede exigir aumentarlo y recompilar. PubSubClient no expone validación individual de SUBACK; permisos o suscripciones fallidas se evidencian por falta de respuestas y el límite de intentos.
+
+La demo suma tiempo MQTT conectado durante el arranque, incluso entre reconexiones. A los 30 minutos envía DISCONNECT, apaga Wi-Fi y prohíbe reconectar hasta reiniciar. La cuota diaria no se repone al reiniciar. Una negociación o lectura de socket en curso puede retrasar unos segundos la evaluación del vencimiento; TLS tiene timeout de handshake de 5 s y socket MQTT de 2 s. No es una desconexión en tiempo real estricto.
+
+## Prueba desde AWS
+
+Ver el procedimiento y la matriz de 14 validaciones en [docs/PRUEBAS_AWS.md](docs/PRUEBAS_AWS.md). Se incluye [política de ejemplo](docs/aws-iot-policy.example.json) para revisión; reemplazar el ID de cuenta y asociarla al certificado activo y al Thing. No se aplicó ninguna política ni se modificó la cuenta AWS desde esta sesión.
+
+## Consumo y AWS Billing
+
+En una demo estable de 30 minutos se esperan aproximadamente 1 GET, 1 sincronización inicial y 29–30 respaldos, más cambios y reintentos. Es una estimación del firmware, no una medición AWS. Mantener conectado todo el día produciría 1440 respaldos sin cuota: por eso se limita la sesión y se suspenden envíos al gastar el presupuesto.
+
+Comparar STATUS antes/después de cada prueba. AWS también mide conectividad, mensajería y operaciones Shadow; el contador local no incluye comandos de consola, otras aplicaciones, respuestas, entregas adicionales ni otros dispositivos. Verificar en Billing/Cost Explorer y Free Tier/Créditos: elegibilidad y vencimiento de la cuenta, saldo, consumo agregado, región, tamaño de documentos/mensajes y actividad externa. Las condiciones cambian según el plan y fecha de alta. Revisar la [tarifa oficial de IoT Core](https://aws.amazon.com/iot-core/pricing/). **200 solicitudes locales no garantizan gasto cero ni un techo absoluto de factura.** No se habilitaron reglas, logs cloud ni servicios adicionales.
+
+## Resultado de verificación
+
+Compilación PlatformIO ESP32: SUCCESS. Pruebas host: PASS (lógica con dobles; no pruebas físicas). Ver detalles finales de uso de memoria y alcance en `docs/PRUEBAS_AWS.md`.
+
+No se cargó firmware, no se conectó el dispositivo a AWS y no se comprobó Billing. La aceptación TLS real, certificados/política, apertura/cierre físico, precisión del sensor, persistencia ante corte eléctrico y tiempos reales siguen pendientes de banco.
+
+No se realizaron commits ni pushes. `config.h`, `secrets.h`, `.pio/` y `.vscode/` están ignorados; un archivo ya rastreado no deja de estarlo por `.gitignore`. Antes de una publicación autorizada, revisar el índice, incluido `.vscode/extensions.json` heredado de fase 1, y excluir toda configuración local del editor.

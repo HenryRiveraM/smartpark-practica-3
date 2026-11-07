@@ -7,3 +7,5 @@
 # Credenciales locales
 /include/secrets.h
 /include/config.h
+# Configuracion local del editor
+.vscode/

@@ -1,0 +1,40 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "iot:Connect",
+      "Resource": "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:client/smartpark-grupo9-01"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Publish",
+      "Resource": [
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topic/$aws/things/smartpark-grupo9-01/shadow/get",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topic/$aws/things/smartpark-grupo9-01/shadow/update"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Subscribe",
+      "Resource": [
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topicfilter/$aws/things/smartpark-grupo9-01/shadow/update/delta",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topicfilter/$aws/things/smartpark-grupo9-01/shadow/get/accepted",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topicfilter/$aws/things/smartpark-grupo9-01/shadow/get/rejected",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topicfilter/$aws/things/smartpark-grupo9-01/shadow/update/accepted",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topicfilter/$aws/things/smartpark-grupo9-01/shadow/update/rejected"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "iot:Receive",
+      "Resource": [
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topic/$aws/things/smartpark-grupo9-01/shadow/update/delta",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topic/$aws/things/smartpark-grupo9-01/shadow/get/accepted",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topic/$aws/things/smartpark-grupo9-01/shadow/get/rejected",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topic/$aws/things/smartpark-grupo9-01/shadow/update/accepted",
+        "arn:aws:iot:us-east-1:REEMPLAZAR_ACCOUNT_ID:topic/$aws/things/smartpark-grupo9-01/shadow/update/rejected"
+      ]
+    }
+  ]
+}

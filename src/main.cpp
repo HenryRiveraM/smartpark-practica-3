@@ -3,10 +3,13 @@
 #include "UltrasonicSensor.h"
 #include "BarrierServo.h"
 #include "SerialCommands.h"
+#include "AwsIoTManager.h"
 namespace {
 UltrasonicSensor sensor;
 BarrierServo barrier;
 SerialCommands commands;
+AwsIoTManager aws;
+uint32_t lastAwsStatusMs = 0;
 uint32_t lastSampleMs = 0;
 void printBarrier() {
     if (!barrier.initialized()) { Serial.println("Servo: fallo de asignacion PWM"); return; }
@@ -36,9 +39,9 @@ void printDistance() {
 void execute(SerialCommands::Command cmd) {
     using C = SerialCommands::Command;
     switch (cmd) {
-    case C::Open: Serial.println("Comando recibido: OPEN"); barrier.open(); printBarrier(); break;
-    case C::Close: Serial.println("Comando recibido: CLOSE"); barrier.close(); printBarrier(); break;
-    case C::Status: printDistance(); printBarrier(); break;
+    case C::Open: Serial.println("Comando recibido: OPEN"); barrier.open(); aws.noteSerialCommand(true); printBarrier(); break;
+    case C::Close: Serial.println("Comando recibido: CLOSE"); barrier.close(); aws.noteSerialCommand(false); printBarrier(); break;
+    case C::Status: printDistance(); printBarrier(); aws.printStatus(); break;
     case C::Distance: printDistance(); break;
     case C::Help: Serial.println("Comandos: OPEN, CLOSE, STATUS, DISTANCE, HELP (terminar con CR o LF)"); break;
     case C::Invalid: Serial.println("Comando invalido o demasiado largo. Use HELP."); break;
@@ -50,8 +53,9 @@ void setup() {
     Serial.begin(SERIAL_BAUD);
     sensor.begin();
     barrier.begin();
+    if (!aws.begin()) Serial.println("AWS: no se pudo iniciar tarea; modo local disponible");
     lastSampleMs = millis();
-    Serial.println("=== SmartPark - ESP32 / Fase 1 ===");
+    Serial.println("=== SmartPark - ESP32 / Fase 2 ===");
     Serial.println("Sistema iniciado. HC-SR04: pines configurados, funcionamiento no verificado.");
     printBarrier();
     execute(SerialCommands::Command::Help);
@@ -66,5 +70,9 @@ void loop() {
         lastSampleMs = now;
         sensor.measure();
         printDistance();
+    }
+    aws.tick(barrier, sensor);
+    if (static_cast<uint32_t>(now-lastAwsStatusMs) >= AWS_STATUS_INTERVAL_MS) {
+        lastAwsStatusMs = now; aws.printStatus();
     }
 }

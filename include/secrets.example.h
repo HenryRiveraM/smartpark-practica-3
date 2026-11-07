@@ -2,7 +2,7 @@
 
 // ============================================================
 // Plantilla AWS IoT Core de SmartPark, sin credenciales reales.
-// Pegar los PEM completos antes de implementar la conexion IoT.
+// Copiar a secrets.h y pegar los PEM completos para conectar.
 // Los bloques vacios son marcadores, no certificados validos.
 // ============================================================
 
@@ -29,3 +29,6 @@ static const char AWS_PRIVATE_KEY[] PROGMEM = R"KEY(
 
 -----END RSA PRIVATE KEY-----
 )KEY";
+
+#define WIFI_SSID "REEMPLAZAR"
+#define WIFI_PASSWORD "REEMPLAZAR"
