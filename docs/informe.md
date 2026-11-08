@@ -1900,7 +1900,7 @@ Los intents de Amazon no necesitan frases propias: el modelo integrado de Alexa 
 
 | ID | RF | Procedimiento | Entrada (frase exacta) | Resultado esperado (texto del handler) | Cobertura automática | Resultado obtenido | Evidencia | Estado |
 |---|---|---|---|---|---|---|---|---|
-| PF-01 | RF1 | Colocar un objeto a 10, 20 y 30 cm y enviar `DISTANCE` por serie | `DISTANCE` | `Distancia: ≈10.0 / 20.0 / 30.0 cm` y `Vehiculo detectado: SI / NO / NO` | `test_main.cpp` (conversión e histéresis) | ⏳ | `evidencias/pruebas/pf01-serial.png` | ⏳ Pendiente |
+| PF-01 | RF1 | Colocar un objeto a 10, 20 y 30 cm y enviar `DISTANCE` por serie | `DISTANCE` | `Distancia: ≈10.0 / 20.0 / 30.0 cm` y `Vehiculo detectado: SI / NO / NO` | `test_main.cpp` (conversión e histéresis) | ⏳ | `evidencias/pruebas/PF-01/pf01.xlsx,pf01-serial.png` | ⏳ Pendiente |
 | PF-02 | RF2 | Dejar el banco en reposo 3 min y observar `update/accepted` en el cliente de prueba MQTT | — | Un UPDATE cada ≈ 60 s con los 3 atributos | #8 host | ⏳ | `evidencias/aws-iot/pf02-mqtt.png` | ⏳ Pendiente |
 | PF-03 | RF2 | Mover el objeto de 30 a 40 cm | — | UPDATE de categoría Sensor ≤ 5 s después, con la nueva `distancia_cm` | #6 host | ⏳ | `evidencias/aws-iot/pf03-mqtt.png` | ⏳ Pendiente |
 | PF-04 | RF3 | Publicar desde la consola `{"state":{"desired":{"barrera":"abierta"}}}` | — | Serie: `AWS comando recibido: abierta`. El servo abre. `reported.barrera = "abierta"` con el `clientToken` del ESP32. | #3, #5 host | ⏳ | `evidencias/aws-iot/pf04-shadow.png` + video | ⏳ Pendiente |
