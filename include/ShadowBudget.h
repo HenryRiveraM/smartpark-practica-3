@@ -20,6 +20,6 @@ public:
         record = ShadowBudgetRecord{}; record.day = day; return true;
     }
     bool allows(Kind kind, uint32_t limit, uint32_t reserved) const {
-        return total() < (kind == Control ? limit : limit-reserved);
+        return total() < ((kind == Control || kind == Recovery) ? limit : (reserved <= limit ? limit-reserved : 0));
     }
 };

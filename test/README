@@ -1,3 +1,9 @@
 Pruebas sin hardware: sh test/run_host_tests.sh
 Los dobles en host/fakes solo se incluyen al compilar ese script.
 Procedimiento físico y limitaciones: ../README.md, sección Pruebas de banco pendientes.
+
+Regresiones AWS con dobles: techo diario 1000, reserva 200 para Control/Recovery,
+500 ms / 3 muestras, distancia 10 cm, intervalo ordinario 10 s, respaldo 30 s,
+presencia y control prioritarios, SG90 estimado 700 ms, Wi-Fi/MQTT y desired GET,
+NVS anterior de 172 solicitudes preservado y frontera de demo de 60 min.
+No se realizan llamadas AWS ni se carga el ESP32.
