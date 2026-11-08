@@ -48,6 +48,9 @@ void AwsIoTManager::printStatus() {
         (unsigned long)(s.counts[0]+s.counts[1]+s.counts[2]+s.counts[3]),
         (unsigned long)s.counts[0], (unsigned long)s.counts[1], (unsigned long)s.counts[2],
         (unsigned long)s.counts[3], (unsigned long)s.accepted, (unsigned long)s.rejected, (unsigned long)s.skipped);
+    Serial.printf("Diagnostico NVS=%s horaUTC=%s recuperacion=%s MQTTstate=%d intentos=%lu siguiente=%lu ms\n",
+        s.storage?"OK":"ERROR", s.time?"OK":"INVALIDA", s.recoveryOK?"disponible":"bloqueada",
+        s.mqttState, (unsigned long)s.attempts, (unsigned long)s.retryIn);
     Serial.printf("Presupuesto ordinario=%s diaUTC=%lu; ultima publicacion hace=%lu ms (0 si ninguna); demo=%s conectadoAcumulado=%lu ms; reintentos=%s\n",
         s.budgetOK?"disponible":"agotado/sin hora/NVS", (unsigned long)s.day,
         (unsigned long)(s.lastPublish ? millis()-s.lastPublish : 0),
@@ -159,7 +162,7 @@ void AwsIoTManager::connectStep(uint32_t now) {
         if (!mqtt_.subscribe(topic, 1)) { failedAttempt(millis()); return; }
     }
     if (connections_++) ++status_.reconnects;
-    // No reiniciar attempts con cada conexion: evita ciclos conectar/desconectar ilimitados.
+    // Solo una sincronizacion GET valida restablece los fallos consecutivos.
     ++attempts_; retryDelay_ = MQTT_RETRY_INTERVAL_MS;
     version_ = 0; requestAttempts_ = 0; rejectedBlocked_ = false;
     Serial.println("AWS MQTT/TLS conectado; suscripciones enviadas; GET unico");
@@ -209,7 +212,7 @@ void AwsIoTManager::receive(char* topic, uint8_t* payload, unsigned int length) 
     if (!strcmp(topic, TOPIC_SHADOW_GET_REJECTED)) {
         if (!getPending_ || !ours) return;
         getPending_ = false; ++status_.rejected;
-        if (doc["code"].as<int>() == 404) { synced_ = true; haveConfirmed_ = false; }
+        if (doc["code"].as<int>() == 404) { synced_ = true; haveConfirmed_ = false; attempts_ = 0; }
         else { rejectedBlocked_ = true; Serial.println("AWS GET rechazado; informes suspendidos"); }
         return;
     }
@@ -218,7 +221,7 @@ void AwsIoTManager::receive(char* topic, uint8_t* payload, unsigned int length) 
     if (get && (!getPending_ || !ours)) return;
     const uint32_t version = doc["version"] | 0U;
     if (get) {
-        getPending_ = false; synced_ = true;
+        getPending_ = false; synced_ = true; attempts_ = 0;
         // Un delta mas reciente puede haberse procesado antes del GET.
         if (version < version_) return;
         JsonObject r = doc["state"]["reported"];
@@ -244,6 +247,7 @@ void AwsIoTManager::report(ShadowBudget::Kind kind) {
     snprintf(token_, sizeof(token_), "%08lx-%lu", (unsigned long)esp_random(), (unsigned long)++tokenSequence_);
     doc["clientToken"] = token_;
     JsonObject r = doc.createNestedObject("state").createNestedObject("reported");
+    r["barrera_posicion_estimada"] = true; // SG90 sin realimentacion fisica.
     r["barrera"] = current_.open ? "abierta" : "cerrada";
     // null borra datos viejos: un timeout nunca se presenta como distancia/presencia valida.
     if (current_.valid) r["distancia_cm"] = roundf(current_.distance*10)/10; else r["distancia_cm"] = nullptr;
@@ -251,6 +255,7 @@ void AwsIoTManager::report(ShadowBudget::Kind kind) {
     if (reportedPresence >= 0) r["vehiculo_detectado"] = reportedPresence == 1; else r["vehiculo_detectado"] = nullptr;
     char body[512]; serializeJson(doc, body, sizeof(body));
     sent_ = current_; sent_.presence = reportedPresence;
+    inflightKind_ = kind;
     inflight_ = true; requestAt_ = millis(); lastPublish_ = requestAt_;
     lastReport_ = requestAt_;
     ++requestAttempts_;
@@ -301,6 +306,9 @@ void AwsIoTManager::step() {
             if (inflight_ && current_.ready && current_.applied >= desiredSequence_ && current_.open != sent_.open) {
                 inflight_ = false; controlPending_ = true; requestAttempts_ = 0;
             }
+            // Una presencia confirmada desplaza un reporte anterior sin esperar su timeout.
+            if (inflight_ && inflightKind_ != ShadowBudget::Control && !controlPending_ && stableCount_ >= AWS_PRESENCE_STABLE_SAMPLES &&
+                stablePresence_ != sent_.presence) inflight_ = false;
             if (inflight_ && now-requestAt_ >= AWS_SHADOW_RESPONSE_TIMEOUT_MS) {
                 inflight_ = false;
                 if (requestAttempts_ >= AWS_MAX_REQUEST_ATTEMPTS) {
@@ -311,13 +319,15 @@ void AwsIoTManager::step() {
             const bool ready = current_.ready && current_.applied >= desiredSequence_;
             if (mqtt_.connected() && synced_ && !inflight_ && !rejectedBlocked_ && ready) {
                 bool control = controlPending_ || !haveConfirmed_ || !confirmed_.ready || current_.open != confirmed_.open;
-                bool sensor = current_.valid != confirmed_.valid || (current_.valid ? stablePresence_ : -1) != confirmed_.presence ||
+                bool presence = stableCount_ >= AWS_PRESENCE_STABLE_SAMPLES &&
+                    stablePresence_ != confirmed_.presence;
+                bool sensor = presence || current_.valid != confirmed_.valid ||
                     (current_.valid && fabsf(current_.distance-confirmed_.distance) >= AWS_DISTANCE_CHANGE_THRESHOLD_CM);
                 bool periodic = now-lastReport_ >= AWS_REPORT_INTERVAL_MS;
                 if (!control && !sensor && !periodic && sampled) ++status_.skipped;
                 if (control || sensor || periodic) {
                     ShadowBudget::Kind kind = control ? ShadowBudget::Control : (sensor ? ShadowBudget::Sensor : ShadowBudget::Periodic);
-                    bool interval = control || now-lastPublish_ >= AWS_MIN_PUBLISH_INTERVAL_MS;
+                    bool interval = control || presence || now-lastPublish_ >= AWS_MIN_PUBLISH_INTERVAL_MS;
                     bool allowed = refreshDay() && budget_.allows(kind, AWS_MAX_SHADOW_UPDATES_PER_DAY,AWS_RESERVED_CONTROL_UPDATES);
                     if (!allowed && !limitLogged_) {
                         Serial.println("AWS: limite local/hora/NVS impide envios; lecturas y comandos siguen activos");
@@ -336,6 +346,13 @@ void AwsIoTManager::step() {
     updateStatus();
 }
 void AwsIoTManager::updateStatus() {
+    status_.time = timeReady_ && time(nullptr) >= AWS_MIN_VALID_EPOCH &&
+        static_cast<uint32_t>(time(nullptr)/86400) >= budget_.record.day;
+    status_.recoveryOK = refreshDay() && budget_.allows(ShadowBudget::Recovery,
+        AWS_MAX_SHADOW_UPDATES_PER_DAY, AWS_RESERVED_CONTROL_UPDATES);
+    status_.storage = storageOK_;
+    status_.mqttState = mqtt_.state(); status_.attempts = attempts_;
+    status_.retryIn = static_cast<int32_t>(nextAttempt_-millis()) > 0 ? nextAttempt_-millis() : 0;
     status_.wifi = WiFi.status() == WL_CONNECTED; status_.mqtt = mqtt_.connected();
     for (unsigned i=0;i<4;++i) status_.counts[i] = budget_.record.counts[i];
     status_.budgetOK = refreshDay() && budget_.allows(ShadowBudget::Periodic,AWS_MAX_SHADOW_UPDATES_PER_DAY,AWS_RESERVED_CONTROL_UPDATES);

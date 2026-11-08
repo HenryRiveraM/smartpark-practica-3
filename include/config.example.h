@@ -78,13 +78,13 @@ static_assert(VEHICLE_DETECTION_CM >= MIN_DISTANCE_CM &&
               DETECTION_HYSTERESIS_CM >= 0, "Umbrales invalidos");
 
 // Limites locales academicos: NO son cuotas gratuitas oficiales de AWS.
-#define AWS_REPORT_INTERVAL_MS             60000UL
-#define AWS_MIN_PUBLISH_INTERVAL_MS         5000UL
-#define AWS_DISTANCE_CHANGE_THRESHOLD_CM   5.0f
-#define AWS_MAX_SHADOW_UPDATES_PER_DAY      200U
-#define AWS_RESERVED_CONTROL_UPDATES       30U
+#define AWS_REPORT_INTERVAL_MS             30000UL
+#define AWS_MIN_PUBLISH_INTERVAL_MS         10000UL
+#define AWS_DISTANCE_CHANGE_THRESHOLD_CM   10.0f
+#define AWS_MAX_SHADOW_UPDATES_PER_DAY      1000U
+#define AWS_RESERVED_CONTROL_UPDATES       200U
 #define AWS_PRESENCE_STABLE_SAMPLES         3U
-#define AWS_DEMO_MAX_CONNECTED_MS          1800000UL // 0 desactiva el limite
+#define AWS_DEMO_MAX_CONNECTED_MS          3600000UL // 0 desactiva el limite
 #define AWS_RETRY_MAX_MS                   300000UL
 #define AWS_MAX_CONNECTION_ATTEMPTS        10U
 #define AWS_SHADOW_RESPONSE_TIMEOUT_MS     15000UL

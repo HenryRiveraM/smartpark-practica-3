@@ -32,6 +32,9 @@ private:
     struct Status {
         uint32_t counts[4] = {}, reconnects = 0, skipped = 0, accepted = 0, rejected = 0;
         uint32_t lastPublish = 0, connectedMs = 0, day = 0;
+        bool storage = false, time = false, recoveryOK = false;
+        int mqttState = -1;
+        uint32_t attempts = 0, retryIn = 0;
         bool wifi = false, mqtt = false, budgetOK = false, demoEnded = false, stopped = false;
         char lastCommand[24] = "ninguno";
     };
@@ -42,6 +45,7 @@ private:
     Preferences prefs_;
     ShadowBudget budget_;
     Snapshot current_, confirmed_, sent_;
+    ShadowBudget::Kind inflightKind_ = ShadowBudget::Periodic;
     Status status_;
     bool storageOK_ = false, timeReady_ = false, demoEnded_ = false;
     bool synced_ = false, haveConfirmed_ = false, inflight_ = false, getPending_ = false;
