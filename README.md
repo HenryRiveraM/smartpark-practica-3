@@ -1,3 +1,24 @@
+# Práctica 3 — Integración de Objetos Inteligentes con Alexa y AWS IoT Core
+
+**Carrera:** Ingeniería de Sistemas
+
+**Docente:** Eduardo Enrique Marin Garcia
+
+**Asignatura:** Internet de las Cosas [SIS-234]
+
+**Semestre:** 2-2026
+
+**Grupo:** 9
+
+**Integrantes:**
+
+- Carlos Eduardo Iriarte Rodriguez
+- Isabella Catherine Montes Iñiguez
+- Henry Alejandro Rivera Mendez
+
+---
+
+
 # SmartPark — fase 2
 
 Firmware ESP32 DOIT DEVKIT V1, HC-SR04 y SG90 con control Serial y AWS IoT Core mediante Shadow clásico. Thing `smartpark-grupo9-01`, región `us-east-1`, MQTT/TLS 8883. No se añadieron otros servicios AWS ni apertura automática.
