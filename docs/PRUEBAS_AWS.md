@@ -37,13 +37,13 @@ Todas las verificaciones AWS/hardware de esta tabla están **pendientes**. Los P
 | 3 | Enviar desired abierta | Servo abre una vez y Serial registra orden | Cola AWS y servo doble: PASS |
 | 4 | Enviar desired cerrada | Servo cierra, sin apertura por sensor | Lógica: PASS; hardware pendiente |
 | 5 | Observar reported y accepted del ESP32 | Confirma tras fin estimado; no confundir accepted de consola | Espera, correlación y reported: PASS |
-| 6 | Cambiar distancia ≥5 cm, sin cambiar presencia | UPDATE ordinario con distancia, respetando 5 s | PASS |
-| 7 | Mantener objeto <15 cm por 3 muestras; retirarlo >18 cm | Cambia presencia estable, respetando intervalo; no abre solo | Debounce, histéresis y presencia: PASS |
-| 8 | Mantener distancia estable, variarla <5 cm; repetir desired | Sin UPDATE extra antes de 60 s; respaldo agrupa cambios | PASS |
+| 6 | Cambiar distancia ≥10 cm, sin cambiar presencia | UPDATE ordinario con distancia, respetando 10 s | PASS |
+| 7 | Mantener objeto <15 cm por 3 muestras; retirarlo >18 cm | Cambia presencia estable, sin esperar intervalo ordinario; no abre solo | Debounce, histéresis y presencia: PASS |
+| 8 | Mantener distancia estable, variarla <10 cm; repetir desired | Sin UPDATE extra antes de 30 s; respaldo agrupa cambios | PASS |
 | 9 | Cortar Wi-Fi y restaurarlo | Reintentos espaciados, backoff, límite y Serial operativo | Backoff/límite: PASS; radio pendiente |
 | 10 | Sin ESP32 conectado, cambiar desired; volver a conectarlo | Un GET recupera y ejecuta la última orden pendiente | GET con desired pendiente: PASS |
 | 11 | Comparar STATUS antes/después; reiniciar sin borrar flash | Aumenta categoría correcta, cuota no se repone el mismo día | Registro NVS doble/restauración: PASS |
-| 12 | Con configuración de banco, límite=8 y reserva=3, agotar ordinarias y controles | Ordinarias se detienen al total 5; controles hasta 8; servo local sigue | Límites/reserva/fallo NVS/servo: PASS |
+| 12 | Con configuración de banco, límite=8 y reserva=3, agotar ordinarias y controles | Ordinarias se detienen al total 5; control y recuperación hasta 8; servo local sigue | Límites/reserva/fallo NVS/servo: PASS |
 | 13 | Para acelerar, configurar demo=60000; mantener conectividad y reconectar antes del fin | Desconexión tras tiempo acumulado, sin reconexión automática | Tiempo acumulado y bloqueo: PASS |
 | 14 | Arrancar sin Wi-Fi o con demo vencida; OPEN/CLOSE/STATUS | Sensor cada 500 ms y servo/Serial operativos | Loop local y servo/parser: PASS |
 
@@ -54,9 +54,11 @@ Pruebas complementarias pendientes: CA incorrecta debe impedir TLS; clave/certif
 ## Ejecución real en desarrollo
 
 - `pio run` sobre `espressif32@7.1.0`, ESP32Servo 1.1.2, PubSubClient 2.8.0 y ArduinoJson 6.21.5: SUCCESS.
-- Uso final: RAM 46.908 / 327.680 bytes (14,3 %); flash 938.313 / 1.310.720 bytes (71,6 %). El uso de RAM informado por PlatformIO es estático; TLS, colas, JSON y la pila de tarea también consumen memoria dinámica que debe observarse en banco.
+- Uso final: RAM 46.924 / 327.680 bytes (14,3 %); flash 938.837 / 1.310.720 bytes (71,6 %). El uso de RAM informado por PlatformIO es estático; TLS, colas, JSON y la pila de tarea también consumen memoria dinámica que debe observarse en banco.
 - `sh test/run_host_tests.sh`: compila C++17 con `-Wall -Wextra -Werror -pedantic`; PASS para sensor/servo/parser/loop local y gestor AWS con dobles.
 - No se realizaron carga, conexión TLS real, órdenes en AWS, movimientos físicos ni comprobación de Billing.
 - El primer intento de compilación quedó bloqueado por permisos de caché global; se repitió con permisos concedidos y terminó correctamente.
 
 El binario contiene credenciales por diseño X.509 del dispositivo. `.pio/` es un artefacto local ignorado: no compartirlo ni subirlo a GitHub. Las plantillas públicas no contienen credenciales.
+
+Verificación local de esta revisión (2026-11-08): ambas suites C++ PASS; 91 pruebas Lambda con dobles PASS (`.venv/bin/python -B -m unittest discover -s tests`, desde `lambda/`). El SDK ASK emite SyntaxWarning de escapes en Python 3.13; no hubo fallos. `git diff --check` sin errores. Sin llamadas AWS, carga al ESP32, commits ni pushes.
