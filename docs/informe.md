@@ -1853,14 +1853,14 @@ Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware c
 
 | ID | RF | Procedimiento | Resultado esperado | Resultado obtenido | Evidencia | Estado |
 |---|---|---|---|---|---|---|
-| PF-01 | RF1 | Coloca un objeto a 10, 20 y 30 cm del HC-SR04 y observa el monitor serie. | El monitor serie muestra mediciones cercanas a las distancias reales. | ⏳ | — | ⏳ Pendiente |
-| PF-02 | RF1 | Acerca un objeto a 10 cm y después aléjalo por encima de 18 cm. | Cambia de vehículo presente a vehículo ausente, con histéresis: presente a 15 cm o menos y ausente desde 18 cm. | ⏳ | — | ⏳ Pendiente |
-| PF-03 | RF2, RF4 | Observa el Device Shadow mientras acercas y alejas el objeto. | Se actualizan `distancia_cm` y `vehiculo_detectado` en `reported`. | ⏳ | `docs/images/evidencias/pf03-shadow.png` | ⏳ Pendiente |
-| PF-04 | RF3, RF5 | Di «Alexa, abre parqueo inteligente» y luego «abrir». | El servo se mueve a 90° y `reported.barrera` indica `abierta`. | ⏳ | `docs/images/evidencias/pf04-alexa.png` | ⏳ Pendiente |
-| PF-05 | RF3, RF5 | Di «cerrar la barrera» mientras la skill está activa. | El servo se mueve a 0° y `reported.barrera` indica `cerrada`. | ⏳ | — | ⏳ Pendiente |
-| PF-06 | RF4, RF6 | Pregunta «consultar distancia», «consultar vehículo» y «consultar estado». | Alexa responde en español con los valores reportados por el dispositivo. | ⏳ | — | ⏳ Pendiente |
-| PF-07 | RF7, RF8 | Cierra Alexa, vuelve a abrir la skill y solicita el estado. | El usuario sigue vinculado sin ingresar otro PIN. | ⏳ | — | ⏳ Pendiente |
-| PF-08 | RF7 | Prueba un código incorrecto o vencido, sin generar múltiples intentos innecesarios. | Alexa rechaza el código con "El código no es válido, caducó, no está autorizado o se agotaron los intentos. Solicita ayuda al administrador." y no cambia la vinculación. | ⏳ | — | ⏳ Pendiente |
+| PF-01 | RF1 | Coloca un objeto a 10, 20 y 30 cm del HC-SR04 y observa el monitor serie. | El monitor serie muestra mediciones cercanas a las distancias reales. | Todas las pruebas pasaron de manera satisfactoria | `docs/evidencias/pruebas/PF-01` | Finalizado |
+| PF-02 | RF1 | Acerca un objeto a 10 cm y después aléjalo por encima de 18 cm. | Cambia de vehículo presente a vehículo ausente, con histéresis: presente a 15 cm o menos y ausente desde 18 cm. | Las pruebas pasaron de manera satifactoria | `docs/evidencias/pruebas/PF-02` | Finalizado |
+| PF-03 | RF2, RF4 | Observa el Device Shadow mientras acercas y alejas el objeto. | Se actualizan `distancia_cm` y `vehiculo_detectado` en `reported`. | Las pruebas pasaron de manera satisfactoria | `docs/evidencias/pruebas/PF-03` | Finalizado |
+| PF-04 | RF3, RF5 | Di «Alexa, abre parqueo inteligente» y luego «abrir». | El servo se mueve a 90° y `reported.barrera` indica `abierta`. | Las pruebas pasaron de manera satisfactoria | `docs/evidencias/pruebas/PF-04` | Finalizado |
+| PF-05 | RF3, RF5 | Di «cerrar la barrera» mientras la skill está activa. | El servo se mueve a 0° y `reported.barrera` indica `cerrada`. | Las pruebas pasaron de manera satisfactoria | `docs/evidencias/pruebas/PF-05` | Finalizado |
+| PF-06 | RF4, RF6 | Pregunta «consultar distancia», «consultar vehículo» y «consultar estado». | Alexa responde en español con los valores reportados por el dispositivo. | Las pruebas pasaron de manera satisfactoria | `docs/evidencias/pruebas/PF-06` | Finalizado |
+| PF-07 | RF7, RF8 | Cierra Alexa, vuelve a abrir la skill y solicita el estado. | El usuario sigue vinculado sin ingresar otro PIN. | Las pruebas pasaron de manera satisfactoria | `docs/evidencias/pruebas/PF-07` | Finalizado |
+| PF-08 | RF7 | Prueba un código incorrecto o vencido, sin generar múltiples intentos innecesarios. | Alexa rechaza el código con "El código no es válido, caducó, no está autorizado o se agotaron los intentos. Solicita ayuda al administrador." y no cambia la vinculación. | Las pruebas pasaron de manera satisfactoria | `docs/evidencias/pruebas/PF-08` | Finalizado |
 
 ### 4.2 Pruebas no funcionales
 
