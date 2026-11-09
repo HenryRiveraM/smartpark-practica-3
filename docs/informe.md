@@ -1370,10 +1370,10 @@ Los dos registros nacen juntos en una transacción de dos `Put` ([`pairing_servi
 |---|---|
 | Tipo | Skill custom con backend en AWS Lambda |
 | Nombre de invocación | `parqueo inteligente` (aparece en [`system_handlers.py`](../lambda/handlers/system_handlers.py#L17) y en [`lambda/README.md`](../lambda/README.md)) |
-| Locale | Español. Los eventos de prueba usan `es-ES`. |
+| Locale | Consola capturada: Spanish (US), `es-US`. Los eventos de prueba del repositorio usan `es-ES`. |
 | Slot | `codigo`, de tipo `AMAZON.FOUR_DIGIT_NUMBER`, en `VincularParqueoIntent` y `CambiarVinculacionIntent` |
 
-> ⏳ **PENDIENTE (manual):** confirmar en Alexa Developer Console → *Invocations* que el nombre de invocación es exactamente `parqueo inteligente`, y anotar qué locale se usó (es-ES, es-US o es-MX). Si difiere, corregir esta tabla.
+> **Confirmado en la captura de Invocations (3.3):** nombre `parqueo inteligente`, locale Spanish (US), `es-US`.
 
 **Intents y frases de ejemplo** (fuente: [`lambda/README.md`](../lambda/README.md)):
 
@@ -1676,10 +1676,14 @@ return value
 | Suite | Alcance | Comando | Resultado según el registro del repositorio |
 |---|---|---|---|
 | Firmware host ([`test/host/`](../test/host/)) | Sensor, servo, parser, `loop()` local y `AwsIoTManager` con dobles de red, NVS, RTOS y TLS. Usa ArduinoJson real. | `sh test/run_host_tests.sh` | PASS. Reejecutada el 8 de noviembre de 2026 con el firmware actual y `config.example.h`: PASS en las dos suites (local y AWS con dobles). |
-| Compilación ESP32 | `pio run` sobre `espressif32@7.1.0` | `pio run` | SUCCESS (registro anterior a los últimos cambios del firmware). RAM 46 908 / 327 680 bytes (14,3 %), flash 938 313 / 1 310 720 bytes (71,6 %). |
+| Compilación ESP32 | `pio run` sobre `espressif32@7.1.0` | `pio run` | SUCCESS en la captura aportada (8 de noviembre de 2026). RAM 46 924 / 327 680 bytes (14,3 %), flash 938 541 / 1 310 720 bytes (71,6 %). |
 | Lambda ([`lambda/tests/`](../lambda/tests/)) | 91 pruebas: handlers, PIN, concurrencia, sesión, aislamiento de paquetes y logs sanitizados | `.venv/bin/python -B -m unittest discover -s tests -v` | 91 OK; 74 sobre el ZIP de Alexa extraído ([`lambda/README.md`](../lambda/README.md)) |
 
-> ⏳ **PENDIENTE (manual):** volver a ejecutar las tres suites antes de la entrega y guardar las salidas en `docs/evidencias/pruebas/` (`host-tests.txt`, `pio-run.txt` y `lambda-tests.txt`, o capturas). Los resultados citados son los registrados en `docs/PRUEBAS_AWS.md` y `lambda/README.md`.
+![Compilación ESP32 completada con SUCCESS en PlatformIO](evidencias/pruebas/pio-run.png)
+
+La captura aportada muestra `SUCCESS`, RAM de 46 924 / 327 680 bytes (14,3 %) y flash de 938 541 / 1 310 720 bytes (71,6 %). Corresponde a la compilación capturada; no acredita las suites host ni Lambda.
+
+> ⏳ **PENDIENTE (manual):** adjuntar las salidas de las pruebas host y Lambda antes de la entrega (`host-tests.txt` y `lambda-tests.txt`, o capturas).
 
 ### 3.2 Configuraciones en AWS
 
@@ -1713,7 +1717,9 @@ return value
 | Client ID MQTT | Igual al nombre del Thing (`mqtt_.connect(THING_NAME)`) |
 | Endpoint | Endpoint de datos ATS de la cuenta (`AWS_IOT_ENDPOINT`), puerto 8883 |
 
-> ⏳ **PENDIENTE (manual):** captura de AWS IoT → *Manage* → *Things* → `smartpark-grupo9-01` (pestaña *Details* y pestaña *Device Shadows*) en `docs/evidencias/aws-iot/thing.png` y `docs/evidencias/aws-iot/shadow.png`.
+![Detalles del Thing smartpark-grupo9-01 en AWS IoT](evidencias/aws-iot/thing.png)
+
+![Shadow clásico del Thing con estado deseado y reportado](evidencias/aws-iot/shadow.png)
 
 **3.2.2 Certificados**
 
@@ -1721,7 +1727,9 @@ El dispositivo usa autenticación mutua X.509 con tres piezas PEM: Amazon Root C
 
 El binario compilado incluye las credenciales por diseño, así que `.pio/` también está ignorado y no debe compartirse.
 
-> ⏳ **PENDIENTE (manual):** captura de AWS IoT → *Security* → *Certificates* que muestre el certificado en estado **Active** y asociado al Thing y a la política, **recortando o tapando el ID del certificado**, en `docs/evidencias/aws-iot/certificado-activo.png`.
+![Listado de certificados en AWS IoT](evidencias/aws-iot/certificado.png)
+
+> ⏳ **PENDIENTE (manual):** completar la evidencia con el estado Active y las asociaciones al Thing y a la política legibles. La captura del listado deja el estado cortado en el borde derecho. Ocultar el ID del certificado y el ID de cuenta antes de publicar.
 
 **3.2.3 Política IoT**
 
@@ -1734,7 +1742,11 @@ Archivo: [`docs/aws-iot-policy.example.json`](aws-iot-policy.example.json). El I
 | `iot:Subscribe` | `topicfilter/…/shadow/update/delta`, `get/accepted`, `get/rejected`, `update/accepted`, `update/rejected` | Los 5 filtros exactos, sin comodines. |
 | `iot:Receive` | `topic/…` de los mismos 5 temas | Recibir los mensajes de esos temas. |
 
-> ⏳ **PENDIENTE (manual):** captura de AWS IoT → *Security* → *Policies* → política asociada, mostrando el JSON aplicado (con el ID de cuenta tapado), en `docs/evidencias/aws-iot/politica-iot.png`. Confirmar que coincide con el ejemplo del repositorio.
+![Política SmartParkPolicy y su versión activa en AWS IoT](evidencias/aws-iot/politica.png)
+
+La vista de creador muestra `Allow`, acción `iot:*` y recurso `*`: la política capturada tiene permisos más amplios que el ejemplo de mínimo privilegio descrito arriba.
+
+> ⏳ **PENDIENTE (manual):** adjuntar la vista JSON de la política aplicada con el ID de cuenta oculto. La captura actual muestra la vista de creador y conserva el ID de cuenta.
 
 **3.2.4 Lambdas**
 
@@ -1750,7 +1762,13 @@ Archivo: [`docs/aws-iot-policy.example.json`](aws-iot-policy.example.json). El I
 
 Fuente: [`lambda/README.md`](../lambda/README.md). El código no contiene *access keys*: los clientes boto3 se autentican con el rol de ejecución.
 
-> ⏳ **PENDIENTE (manual):** captura de la pestaña *Configuration* → *General* y *Environment variables* de cada Lambda (con el Skill ID tapado) en `docs/evidencias/aws-iot/lambda-alexa-config.png` y `lambda-admin-config.png`. Confirmar la memoria, el timeout y el trigger reales.
+![Variables de entorno de SmartParkAlexaBackend y disparador Alexa](evidencias/aws-iot/lambda-backend.png)
+
+![Variables de entorno de SmartParkPairingAdmin](evidencias/aws-iot/lambda-admin.png)
+
+Las capturas muestran `TABLE_NAME=SmartParkBindings` en ambas funciones y `ALEXA_SKILL_ID` en el backend. El backend muestra un disparador Alexa; la función administradora no muestra desencadenadores.
+
+> ⏳ **PENDIENTE (manual):** adjuntar Configuration → General para confirmar memoria y timeout, y el detalle del disparador para comprobar la restricción al Skill ID. Ocultar el Skill ID y los identificadores de cuenta visibles antes de publicar.
 
 **3.2.5 DynamoDB**
 
@@ -1770,11 +1788,15 @@ Fuente: [`lambda/README.md`](../lambda/README.md). El código no contiene *acces
 
 **Situación real según el repositorio.** [`lambda/README.md`](../lambda/README.md) indica: *"El rol Alexa actual tenía FullAccess"*. Las políticas de [`lambda/iam/`](../lambda/iam/) son **de ejemplo, para revisión, y no fueron aplicadas ni validadas contra IAM real**. Además, añadir una política reducida **no** anula una política FullAccess ya asociada.
 
-> ⏳ **PENDIENTE (manual):** captura de IAM → *Roles* → rol de `SmartParkAlexaBackend` → *Permissions* que muestre qué políticas tiene realmente (por ejemplo `AWSIoTFullAccess` o `AmazonDynamoDBFullAccess`), en `docs/evidencias/aws-iot/rol-lambda-permisos.png`. Completar con ese dato la columna "Asignado" de la tabla siguiente.
+![Permisos del rol de ejecución de SmartParkAlexaBackend](evidencias/aws-iot/iam-rol.png)
+
+La captura confirma `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y una política de logs cuyo nombre comienza por `AWSLambdaBasicExecutionRole`.
+
+> ⏳ **PENDIENTE (manual):** ocultar el ID de cuenta visible en la captura antes de publicar.
 
 | Rol | Asignado (según el repositorio) | Justificación de la asignación | Mínimo para producción (política de ejemplo) |
 |---|---|---|---|
-| `SmartParkAlexaBackend` | Según `lambda/README.md`, el rol tenía políticas *FullAccess*; ⏳ confirmar los permisos actuales en IAM | ⏳ PENDIENTE: confirmar con el grupo el motivo de la asignación. | Ver [`alexa-execution-policy.example.json`](../lambda/iam/alexa-execution-policy.example.json) y la tabla siguiente. |
+| `SmartParkAlexaBackend` | Captura de IAM: `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y política de logs `AWSLambdaBasicExecutionRole…` | ⏳ PENDIENTE: confirmar con el grupo el motivo de la asignación. | Ver [`alexa-execution-policy.example.json`](../lambda/iam/alexa-execution-policy.example.json) y la tabla siguiente. |
 | `SmartParkPairingAdmin` | No consta (rol a crear manualmente) | — | [`admin-execution-policy.example.json`](../lambda/iam/admin-execution-policy.example.json): `dynamodb:PutItem` solo con claves `PAIR#*` y `PAIRUSER#*`, y `iot:DescribeThing` sobre los Things gestionados. |
 | Operador administrador | No consta | — | [`admin-invoke-policy.example.json`](../lambda/iam/admin-invoke-policy.example.json): `lambda:InvokeFunction` solo sobre `SmartParkPairingAdmin`. |
 | Confianza de ambos roles | — | — | [`execution-role-trust.example.json`](../lambda/iam/execution-role-trust.example.json): `sts:AssumeRole` para `lambda.amazonaws.com`. |
@@ -1843,7 +1865,15 @@ Los intents de Amazon no necesitan frases propias: el modelo integrado de Alexa 
 
 > ⏳ **PENDIENTE (manual):** exportar el modelo de interacción real (*Build* → *Interaction Model* → *JSON Editor* → copiar) a `alexa/interaction-model.json`, revisando que no contenga el Skill ID, y corregir el esqueleto anterior si difiere. El repositorio no lo incluye.
 
-> ⏳ **PENDIENTE (manual):** capturas de *Invocations*, de *Intents* (con el slot `codigo`), de *Endpoint* (con el ARN y el Skill ID tapados) y de la pestaña *Test* con un diálogo completo, en `docs/evidencias/alexa/` (`invocacion.png`, `intents.png`, `endpoint.png` y `simulador-dialogo.png`).
+![Nombre de invocación parqueo inteligente en Spanish (US)](evidencias/alexa/invocations.png)
+
+![Lista de intents de la skill SmartPark](evidencias/alexa/intents.png)
+
+![Diálogo del simulador Alexa con desvinculación y vinculación de parqueo](evidencias/alexa/test.png)
+
+La lista muestra un slot en `VincularParqueoIntent` y `CambiarVinculacionIntent`; esta vista no permite comprobar su nombre ni su tipo. El diálogo muestra bienvenida, desvinculación y vinculación correcta mediante código.
+
+> ⏳ **PENDIENTE (manual):** adjuntar el detalle del slot `codigo` y la captura de Endpoint con ARN y Skill ID ocultos. El diálogo contiene un código de vinculación: ocultarlo antes de publicar si aún puede utilizarse.
 
 ---
 
@@ -2100,7 +2130,7 @@ Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el i
 | Uso de flash | 938 313 de 1 310 720 bytes (71,6 %) | 3.1 |
 | Suite de la Lambda | 91 OK; 74 sobre el ZIP de Alexa extraído | [`lambda/README.md`](../lambda/README.md) |
 
-**Interpretación.** La lógica de cuota, reconexión, vinculación y concurrencia queda respaldada por las suites: la del firmware se volvió a ejecutar con el código actual y la de la Lambda conserva su último registro. Las cifras de RAM y flash son del registro anterior a los últimos cambios del firmware y deben confirmarse con un nuevo `pio run` (3.1). Con ese registro, la compilación deja libres unos 364 KiB de flash (28,4 %) y el 85,7 % de la RAM, margen suficiente para las ampliaciones de la sección 7.
+**Interpretación.** La lógica de cuota, reconexión, vinculación y concurrencia queda respaldada por las suites: la del firmware se volvió a ejecutar con el código actual y la de la Lambda conserva su último registro. Las cifras de RAM y flash de la captura de `pio run` aportada se detallan en 3.1. Con esa captura, la compilación deja libres unos 364 KiB de flash (28,4 %) y el 85,7 % de la RAM, margen suficiente para las ampliaciones de la sección 7.
 
 **5.7 Evidencias**
 
@@ -2113,7 +2143,7 @@ Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el i
 | Video y README de PF-08 | PF-08 | `docs/evidencias/pruebas/PF-08` | ✅ Incluido |
 | Captura del monitor serie con `STATUS` al inicio y al final | PNF-01 | `docs/evidencias/pnf01-serial.png` | ⏳ Pendiente |
 | Video de las 10 órdenes | PNF-03 | `docs/evidencias/pnf03-video.mp4` o enlace externo | ⏳ Pendiente |
-| Salidas de las suites y de la compilación | Automáticas | `docs/evidencias/pruebas/` | ⏳ Pendiente |
+| Salidas de las suites y de la compilación | Automáticas | `docs/evidencias/pruebas/` | Parcial: captura `pio-run.png` incluida; faltan host y Lambda |
 
 La columna de estado indica si la evidencia está en el repositorio, no si la prueba se aprobó: ese resultado está en 4.1.
 
@@ -2137,7 +2167,7 @@ Con lo registrado hasta ahora, el sistema tiene respaldo en cuatro frentes: el f
 2. **El Shadow desacopla la voz del dispositivo, y eso se ve en el código.** La Lambda solo escribe `desired` y lee `reported` ([`shadow_service.py`](../lambda/services/shadow_service.py)); el ESP32 solo conoce sus 5 temas MQTT. El diagrama de 2.4.3 y la máquina de estados de la conexión (2.3.1) muestran que una orden dada sin conexión se recupera con el único GET de la reconexión, y `test_aws.cpp` lo verifica con un GET que trae `desired` pendiente. **Pendiente de demostrar:** el tiempo real de recuperación. El código permite estimarlo en ≈ 45–49 s para un corte de 30 s (PNF-04), pero el tiempo que tarda PubSubClient en detectar la pérdida no está acotado.
 3. **La interfaz de voz asume la consistencia eventual en lugar de ocultarla.** La respuesta a una orden es *"Solicité…"*, los errores cierran la sesión sin *reprompt* y la Lambda rechaza cualquier atributo con más de 180 s, evaluado por campo con `metadata` (2.5 y 2.8). El costo es que el usuario puede oír *"desactualizado"* o el estado anterior si consulta antes de la confirmación. **Pendiente de demostrar:** con qué frecuencia ocurre en el uso real (PF-06 y PNF-03).
 4. **La política de reporte cumple el compromiso entre latencia y cuota que se diseñó.** El cálculo de 2.6 acota una demo de 60 min en reposo a 120–122 solicitudes, y el peor caso a 1000 por día, de las que como máximo 800 pueden ser ordinarias. La barrera, que es el evento crítico, se confirma sin esperar los 10 s, y la presencia se publica apenas se estabiliza, entre 1,0 y 1,5 s después del cambio físico; solo los cambios de distancia y de validez esperan la separación mínima. La histéresis de 3 cm es unas nueve veces mayor que el error por temperatura estimado en el umbral de 18 cm (≈ ±0,33 cm entre 10 y 30 °C, con v = 331,3 + 0,606·T m/s frente a los 343 m/s que usa el firmware). **Pendiente de demostrar:** el conteo de UPDATE de PNF-01 y el comportamiento de la histéresis en el banco (PF-02).
-5. **La seguridad de la vinculación es proporcional a un prototipo supervisado, y sus límites están identificados.** El análisis STRIDE (2.7) muestra que las amenazas de manipulación y elevación de privilegios tienen mitigaciones en el código: PIN ligado al destinatario, intentos atómicos, transacciones condicionales y una Lambda separada para generar el PIN. La probabilidad de acierto queda en ≈ 0,033 % por ventana. Quedan dos riesgos residuales sin mitigar: la cuenta de Alexa compartida y la ausencia de historial (repudio). **Pendiente de demostrar:** que el rol real de la Lambda no conserva políticas *FullAccess*. Según `lambda/README.md`, el rol tenía políticas *FullAccess*; ⏳ confirmar los permisos actuales en IAM y, si siguen asignadas, reemplazarlas por las políticas mínimas ya redactadas (3.2.6).
+5. **La seguridad de la vinculación es proporcional a un prototipo supervisado, y sus límites están identificados.** El análisis STRIDE (2.7) muestra que las amenazas de manipulación y elevación de privilegios tienen mitigaciones en el código: PIN ligado al destinatario, intentos atómicos, transacciones condicionales y una Lambda separada para generar el PIN. La probabilidad de acierto queda en ≈ 0,033 % por ventana. Quedan dos riesgos residuales sin mitigar: la cuenta de Alexa compartida y la ausencia de historial (repudio). **Confirmado por la captura de IAM:** el rol conserva `AWSIoTFullAccess` y `AmazonDynamoDBFullAccess`. Queda pendiente reemplazarlas por las políticas mínimas ya redactadas y validar el funcionamiento (3.2.6).
 6. **La concurrencia del firmware es simple y verificable porque cada recurso tiene un único dueño.** Las tres colas de un elemento y la regla *"solo `tick()` toca el hardware"* (3.1) eliminan los *mutex* y hacen que la cuota, la reconexión y la decisión de reporte vivan en una sola tarea, lo que permite probarlas en el PC. El precio es que la tarea de red solo ve la última muestra, y por eso el filtro de presencia reinicia su conteo tras un hueco de más de 630 ms. **Pendiente de demostrar:** la estabilidad durante 10–60 min con TLS real (PNF-01), que es donde podría aparecer una falta de memoria en la pila de 12 288 bytes.
 7. **El actuador no tiene realimentación, y esa es la limitación técnica más importante del prototipo.** La confirmación de la barrera es una estimación de 700 ms (2.3.1): conservadora si el servo es más rápido, y errónea si se bloquea. Ninguna prueba automática puede detectarlo. **Pendiente de demostrar:** el recorrido real t_real en el video de PNF-03. La solución está en 7.2.
 8. **Aprendizajes del equipo.**
