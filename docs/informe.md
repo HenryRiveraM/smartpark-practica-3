@@ -1922,45 +1922,49 @@ Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware c
 
 **Resultados de las pruebas no funcionales**
 
+Fuente: [hoja de registro de pruebas no funcionales](evidencias/pruebas/no-funcionales/registro-no-funcionales.pdf). Los estados siguientes se evalúan contra los criterios del informe; la hoja no consigna estados. Las capturas de serie y el video siguen pendientes.
+
 **PNF-01 · Estabilidad**
 
 | Duración (min) | Reinicios | Bloqueos | Desconexiones | UPDATE aceptados | Estado |
 |---|---|---|---|---|---|
-| ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ Pendiente |
+| 10 | 3 | 0 | 1 | 10 | ❌ No cumple: hubo reinicios |
 
 **PNF-02 · Exactitud del HC-SR04**
 
 | Distancia de referencia (cm) | Lectura 1 | Lectura 2 | Lectura 3 | Lectura 4 | Lectura 5 | Promedio (cm) | Error absoluto máximo (cm) |
 |---|---|---|---|---|---|---|---|
-| 5 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 10 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 15 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 20 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 30 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 40 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 50 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| 5 | 5,2 | 5,1 | 5,0 | 5,2 | 5,3 | 5,16 | 0,3 |
+| 10 | 9,9 | 10,0 | 9,8 | 10,1 | 10,0 | 9,96 | 0,2 |
+| 15 | 15,0 | 15,2 | 14,9 | 15,1 | 15,0 | 15,04 | 0,2 |
+| 20 | 21,0 | 20,4 | 20,8 | 20,2 | 20,6 | 20,60 | 1,0 |
+| 30 | 29,5 | 30,1 | 29,8 | 30,2 | 29,7 | 29,86 | 0,5 |
+| 40 | 40,5 | 40,2 | 39,8 | 40,4 | 40,1 | 40,20 | 0,5 |
+| 50 | 50,1 | 50,5 | 49,7 | 50,3 | 49,9 | 50,10 | 0,5 |
 
-Error absoluto máximo global: ⏳ cm (criterio propuesto ≤ 1 cm). Estado: ⏳ Pendiente.
+Error absoluto máximo global: **1,0 cm**, a 20 cm (criterio propuesto ≤ 1 cm). Estado: ✅ Pasa en las 35 lecturas registradas. Los promedios se recalcularon a dos decimales a partir de las cinco lecturas; la hoja los redondea a uno.
 
 **PNF-03 · Tiempo de respuesta de Alexa**
 
 | Medición | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | Mínimo | Máximo | Promedio |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Tiempo (s) | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| Tiempo (s) | 2 | 3 | 1 | 2 | 4 | 1 | 1 | 1 | 1 | 3 | 1 | 4 | 1,9 |
 
-Criterio propuesto: máximo 3 s por operación. Estado: ⏳ Pendiente.
+Criterio propuesto: máximo 3 s por operación. Estado: ❌ No cumple: 1 de 10 mediciones supera el límite.
+
+**Discrepancia del registro:** la hoja anota un máximo de 5 s, pero las diez mediciones tienen máximo de 4 s. Se usa el máximo recalculado, conservando el PDF original sin cambios. El promedio de 1,9 s sí coincide.
 
 **PNF-04 · Reconexión Wi-Fi y MQTT**
 
-Los tiempos se miden desde que se restablece la red.
+El protocolo pide medir desde que se restablece la red. La hoja expresa los tiempos en minutos aunque sus encabezados dicen segundos; abajo se convierten a segundos. No documenta la duración de cada corte ni si el tiempo MQTT es acumulado desde la restauración o adicional al de Wi-Fi.
 
 | Corte | Tiempo hasta Wi-Fi (s) | Tiempo hasta MQTT (s) | ¿Se aplicó el `desired` pendiente? |
 |---|---|---|---|
-| 1 | ⏳ | ⏳ | ⏳ |
-| 2 | ⏳ | ⏳ | ⏳ |
-| 3 | ⏳ | ⏳ | ⏳ |
+| 1 | 120 (2 min) | 60 (1 min) | Sí |
+| 2 | 60 (1 min) | 180 (3 min) | Sí |
+| 3 | 240 (4 min) | 60 (1 min) | Sí |
 
-Estado: ⏳ Pendiente.
+Estado: ⚠️ Recuperación y aplicación de `desired` registradas en los tres cortes; cumplimiento temporal pendiente de aclarar. No constan reinicios ni intervención manual durante estos cortes. Si MQTT se midió desde la restauración, el corte 2 supera 60 s y los cortes 1 y 3 presentan MQTT anterior a Wi-Fi; si es un tiempo adicional, los totales serían 180, 240 y 300 s. Falta confirmar además la duración de los cortes (criterio condicionado a ≤ 30 s) y la confirmación en `reported`.
 
 **Requisitos sin prueba de banco propia.** La histéresis, el consumo, la seguridad y la calidad de código (RNF4 parcial, RNF6, RNF7 y RNF8) se respaldan con las suites automáticas y el análisis ya descritos en las secciones 2 y 3; no tienen prueba de banco propia en esta práctica. La verificación estática del repositorio (8 de noviembre de 2026) no encontró certificados, claves privadas ni *access keys* de AWS en los archivos rastreados por Git, y `include/secrets.h` e `include/config.h` están ignorados por `.gitignore`.
 
@@ -2020,7 +2024,7 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 | Tipo de prueba | Total | Aprobadas | Fallidas | Pendientes |
 |---|---|---|---|---|
 | Funcionales (4.1) | 8 | 8 | 0 | 0 |
-| No funcionales (4.2) | 4 | ⏳ | ⏳ | ⏳ |
+| No funcionales (4.2) | 4 | 1 (PNF-02) | 2 (PNF-01 y PNF-03) | 1 por aclarar (PNF-04) |
 | Automáticas (firmware, compilación y Lambda) | 3 | 1 reejecutada (firmware) y 2 según el registro | 0 | Nueva ejecución de la compilación y de la Lambda |
 
 *Requerimientos funcionales*
@@ -2041,11 +2045,11 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 
 | Requisito | Criterio (1.4) | Fuente del resultado | Resultado | Estado |
 |---|---|---|---|---|
-| RNF1 Estabilidad | Cero reinicios y cero bloqueos durante ≥ 10 min conectado | PNF-01 (5.5) | ⏳ | ⏳ Pendiente |
-| RNF2 Exactitud | Error máximo ≤ 1 cm en 5–50 cm (propuesta) | PNF-02 (5.2) | ⏳ | ⏳ Pendiente |
-| RNF3 Tiempo de respuesta | Máximo 3 s por operación (propuesta) | PNF-03 (5.3) | ⏳ | ⏳ Pendiente |
+| RNF1 Estabilidad | Cero reinicios y cero bloqueos durante ≥ 10 min conectado | PNF-01 (5.5) | 10 min, 3 reinicios, 0 bloqueos y 1 desconexión | ❌ No cumple |
+| RNF2 Exactitud | Error máximo ≤ 1 cm en 5–50 cm (propuesta) | PNF-02 (5.2) | Error máximo 1,0 cm a 20 cm; 35 lecturas | ✅ Cumple en el rango muestreado |
+| RNF3 Tiempo de respuesta | Máximo 3 s por operación (propuesta) | PNF-03 (5.3) | Máximo recalculado 4 s; promedio 1,9 s; 1 de 10 > 3 s | ❌ No cumple |
 | RNF4 Frecuencia de reporte | Intervalo máximo de 30 s y separación mínima de 10 s entre reportes ordinarios | PNF-01 (5.5) y pruebas automáticas | ⏳ | ⏳ Pendiente |
-| RNF5 Reconexión | Reconexión automática; con un corte ≤ 30 s, `desired` aplicado y confirmado en ≤ 60 s (propuesta) | PNF-04 (5.4) | ⏳ | ⏳ Pendiente |
+| RNF5 Reconexión | Reconexión automática; con un corte ≤ 30 s, `desired` aplicado y confirmado en ≤ 60 s (propuesta) | PNF-04 (5.4) | `desired` aplicado en 3 cortes; tiempos ambiguos | ⚠️ Pendiente de aclaración temporal y confirmación en `reported` |
 | RNF6 Consumo de mensajes | ≤ 1000 solicitudes por día; ordinarias hasta 800 y 200 reservadas para control y GET | PNF-01 (5.5) y pruebas automáticas | ⏳ | ⏳ Pendiente |
 | RNF7 Seguridad | Sin secretos en el repositorio; MQTT sobre TLS con X.509 | Verificación estática (4.2) y pruebas automáticas | Verificación estática del 8 de noviembre de 2026 sin certificados, claves ni *access keys* en los archivos rastreados | ✅ Cumple en la parte estática; ⏳ suites pendientes de nueva ejecución |
 | RNF8 Calidad de código | Suites en PASS y compilación sin *warnings* | Pruebas automáticas (5.6) | Firmware: PASS reejecutado el 8 de noviembre de 2026. Compilación SUCCESS y Lambda 91 OK según el registro | ⏳ Pendiente de nueva ejecución de la compilación y la Lambda |
@@ -2054,14 +2058,14 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 
 | Indicador | Referencia | Origen de la referencia | Valor medido |
 |---|---|---|---|
-| Error absoluto máximo en 5–50 cm | ≤ 1 cm (propuesta) | RNF2 | ⏳ |
-| Distancia con el mayor error | — | — | ⏳ |
-| Error en la zona de los umbrales (15 y 18 cm) | Menor que la banda de histéresis de 3 cm | 2.6 | ⏳ |
-| Lecturas inválidas (timeout o fuera de rango) dentro de 5–50 cm | 0 | RF1 | ⏳ |
+| Error absoluto máximo en 5–50 cm | ≤ 1 cm (propuesta) | RNF2 | 1,0 cm |
+| Distancia con el mayor error | — | — | 20 cm |
+| Error en la zona de los umbrales (15 y 18 cm) | Menor que la banda de histéresis de 3 cm | 2.6 | Máximo 0,2 cm a 15 cm; 18 cm no medido en PNF-02 |
+| Lecturas inválidas (timeout o fuera de rango) dentro de 5–50 cm | 0 | RF1 | Ninguna entre las 35 lecturas anotadas |
 | Error estimado por temperatura en el umbral de 18 cm | ≈ ±0,33 cm entre 10 y 30 °C | v = 331,3 + 0,606·T m/s frente a los 343 m/s del firmware | No se mide |
 | Resolución de la conversión | ≈ 0,017 cm por µs de eco | `SOUND_CM_PER_US` = 0,0343 cm/µs, dividido entre 2 | No se mide |
 
-**Interpretación.** Pendiente de las mediciones. Para leerlas: un error mayor que 1 cm solo en los extremos del rango (5 o 50 cm) no altera la detección de presencia, porque los umbrales están en 15 y 18 cm; un error mayor que 1 cm cerca de esos umbrales sí reduce el margen de la histéresis y debe analizarse.
+**Interpretación.** Las 35 lecturas cumplen el error máximo propuesto; el mayor error es 1,0 cm a 20 cm. No se midió a 18 cm en esta prueba. Para leerlas: un error mayor que 1 cm solo en los extremos del rango (5 o 50 cm) no altera la detección de presencia, porque los umbrales están en 15 y 18 cm; un error mayor que 1 cm cerca de esos umbrales sí reduce el margen de la histéresis y debe analizarse.
 
 **5.3 Tiempo de respuesta (PNF-03)**
 
@@ -2070,15 +2074,15 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 | Voz, Alexa, Lambda, Shadow y red | ≈ 2,2 s | Incluido en el total |
 | Tarea de red y `loop()` del ESP32 | ≈ 0,1 s | Incluido en el total |
 | Recorrido del servo | 0,7 s estimados (`SERVO_TRAVEL_MS`) | ⏳ (recorrido real en el video) |
-| **Total** | **≤ 3 s** | ⏳ (máximo de las 10 mediciones) |
+| **Total** | **≤ 3 s** | 4 s (máximo recalculado de las 10 mediciones) |
 
 | Indicador | Valor |
 |---|---|
-| Promedio de las 10 mediciones | ⏳ |
-| Diferencia entre el máximo y el mínimo | ⏳ |
-| Mediciones que superan 3 s | ⏳ de 10 |
+| Promedio de las 10 mediciones | 1,9 s |
+| Diferencia entre el máximo y el mínimo | 3 s |
+| Mediciones que superan 3 s | 1 de 10 |
 
-**Interpretación.** Pendiente de las mediciones. El criterio se evalúa con el **máximo**, no con el promedio, porque el usuario percibe la peor espera. Si el recorrido real del servo en el video difiere de 0,7 s, esa diferencia es el error de la confirmación estimada que se declara como limitación en 2.3.1.
+**Interpretación.** El máximo recalculado de 4 s supera el límite de 3 s, aunque el promedio de 1,9 s queda por debajo. Falta el video para verificar los puntos de inicio y fin de las mediciones. El criterio se evalúa con el **máximo**, no con el promedio, porque el usuario percibe la peor espera. Si el recorrido real del servo en el video difiere de 0,7 s, esa diferencia es el error de la confirmación estimada que se declara como limitación en 2.3.1.
 
 **5.4 Reconexión (PNF-04)**
 
@@ -2092,9 +2096,9 @@ A cada espera se le suma un *jitter* aleatorio de 0 a 1 s. El tiempo medido desp
 
 | Indicador | Criterio | Resultado |
 |---|---|---|
-| Tiempo máximo hasta MQTT después de restaurar la red | ≤ 60 s (propuesta) | ⏳ |
-| `desired` pendiente aplicado al reconectar | Sí, en los cortes donde se probó | ⏳ |
-| Reinicios de la placa durante los cortes | 0 | ⏳ |
+| Tiempo máximo hasta MQTT después de restaurar la red | ≤ 60 s (propuesta) | Columna MQTT: máximo 180 s; origen temporal por aclarar (4.2) |
+| `desired` pendiente aplicado al reconectar | Sí, en los cortes donde se probó | Sí, en 3 de 3 cortes; confirmación en `reported` no documentada |
+| Reinicios de la placa durante los cortes | 0 | No registrados en PNF-04 |
 | Intento alcanzado al final (serie: `intento n/10`) | ≤ 10 | ⏳ |
 
 **Contador de intentos consecutivos.** Según `connectStep()`, `failedAttempt()` y `receive()`, el contador suma cada pérdida de conexión, cada intento de Wi-Fi y la conexión MQTT, y vuelve a 0 cuando llega un GET válido (`get/accepted` o `get/rejected` con 404). El límite de 10 es, por tanto, de intentos consecutivos sin sincronizar: un corte que se recupera deja el contador en 0, y la placa solo pasa a modo local si un mismo corte acumula 10 intentos seguidos. Con las esperas de la tabla, eso ocurre si la red no vuelve en unos 20 min (5 + 10 + 20 + 40 + 80 + 160 + 300 + 300 + 300 s = 1 215 s, más el *jitter*; estimación según el código).
@@ -2103,8 +2107,8 @@ A cada espera se le suma un *jitter* aleatorio de 0 a 1 s. El tiempo medido desp
 
 | Indicador | Esperado según el diseño | Medido |
 |---|---|---|
-| Reinicios y bloqueos | 0 | ⏳ |
-| `reconexiones` en `STATUS` | 0 | ⏳ |
+| Reinicios y bloqueos | 0 | 3 reinicios y 0 bloqueos en 10 min |
+| `reconexiones` en `STATUS` | 0 | No registrado; la hoja anota 1 desconexión |
 | Intervalo máximo entre UPDATE aceptados | ≤ 30 s | ⏳ |
 | Separación mínima entre reportes ordinarios | ≥ 10 s (no se aplica a cambios de presencia ni a confirmaciones de control) | ⏳ |
 
@@ -2118,7 +2122,7 @@ Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el i
 | GET | Una por conexión (0 si no hubo reconexión durante la prueba) | ⏳ |
 | **Total** | En reposo, ≈ 20 en 10 min y ≈ 30 en 15 min; muy por debajo de las 800 ordinarias y de las 1000 diarias | ⏳ |
 
-**Interpretación.** Pendiente de las mediciones. Un intervalo mayor que 30 s indica un reporte perdido o una cuota agotada. Los reportes de distancia no pueden superar 60 en 10 min ni 90 en 15 min, así que un total cercano a 800 solo es posible con cambios de presencia continuos y significa que la cuota ordinaria cortó los envíos, como se diseñó en 2.6.
+**Interpretación.** PNF-01 no cumple estabilidad por los 3 reinicios en 10 min. Los 10 UPDATE aceptados no bastan para calcular intervalos ni el consumo por categoría; faltan marcas de tiempo y `STATUS` inicial/final. Un intervalo mayor que 30 s indica un reporte perdido o una cuota agotada. Los reportes de distancia no pueden superar 60 en 10 min ni 90 en 15 min, así que un total cercano a 800 solo es posible con cambios de presencia continuos y significa que la cuota ordinaria cortó los envíos, como se diseñó en 2.6.
 
 **5.6 Pruebas automáticas y recursos del firmware**
 
@@ -2141,6 +2145,7 @@ Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el i
 | Videos, hoja de cálculo y README de PF-03 a PF-06 | PF-03, PF-04, PF-05, PF-06 | `docs/evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06` | ✅ Incluido |
 | Video y README de PF-07 | PF-07 | `docs/evidencias/pruebas/PF-07` | ✅ Incluido |
 | Video y README de PF-08 | PF-08 | `docs/evidencias/pruebas/PF-08` | ✅ Incluido |
+| Hoja de registro de las cuatro pruebas no funcionales | PNF-01 a PNF-04 | [PDF](evidencias/pruebas/no-funcionales/registro-no-funcionales.pdf) | ✅ Incluido; observaciones en 4.2 |
 | Captura del monitor serie con `STATUS` al inicio y al final | PNF-01 | `docs/evidencias/pnf01-serial.png` | ⏳ Pendiente |
 | Video de las 10 órdenes | PNF-03 | `docs/evidencias/pnf03-video.mp4` o enlace externo | ⏳ Pendiente |
 | Salidas de las suites y de la compilación | Automáticas | `docs/evidencias/pruebas/` | Parcial: captura `pio-run.png` incluida; faltan host y Lambda |
@@ -2157,7 +2162,7 @@ La columna de estado indica si la evidencia está en el repositorio, no si la pr
 
 **5.9 Análisis global**
 
-Con lo registrado hasta ahora, el sistema tiene respaldo en cuatro frentes: el funcionamiento de extremo a extremo (las 8 pruebas funcionales de 4.1 aprobadas con el ESP32, AWS IoT y Alexa reales), la lógica del firmware y de la Lambda (suites automáticas), el uso de recursos de la compilación y la ausencia de secretos en el repositorio. Lo que todavía no está demostrado son los indicadores no funcionales: la exactitud del HC-SR04 en todo el rango de 5 a 50 cm, el tiempo de respuesta percibido, la reconexión con el punto de acceso real y la estabilidad durante una sesión continua. La conclusión sobre el cumplimiento de RNF1, RNF2, RNF3 y RNF5 queda pendiente de las mediciones de 4.2.
+Con lo registrado hasta ahora, el sistema tiene respaldo en cuatro frentes: el funcionamiento de extremo a extremo (las 8 pruebas funcionales de 4.1 aprobadas con el ESP32, AWS IoT y Alexa reales), la lógica del firmware y de la Lambda (suites automáticas), el uso de recursos de la compilación y la ausencia de secretos en el repositorio. La hoja de pruebas no funcionales aporta resultados de banco: RNF2 cumple en las 35 lecturas entre 5 y 50 cm; RNF1 no cumple por 3 reinicios en 10 min y RNF3 no cumple por una respuesta de 4 s. RNF5 queda pendiente de aclarar el origen temporal de los tiempos y la duración de los cortes. Faltan el monitor serie y el video para completar la evidencia (4.2).
 
 ---
 
@@ -2168,7 +2173,7 @@ Con lo registrado hasta ahora, el sistema tiene respaldo en cuatro frentes: el f
 3. **La interfaz de voz asume la consistencia eventual en lugar de ocultarla.** La respuesta a una orden es *"Solicité…"*, los errores cierran la sesión sin *reprompt* y la Lambda rechaza cualquier atributo con más de 180 s, evaluado por campo con `metadata` (2.5 y 2.8). El costo es que el usuario puede oír *"desactualizado"* o el estado anterior si consulta antes de la confirmación. **Pendiente de demostrar:** con qué frecuencia ocurre en el uso real (PF-06 y PNF-03).
 4. **La política de reporte cumple el compromiso entre latencia y cuota que se diseñó.** El cálculo de 2.6 acota una demo de 60 min en reposo a 120–122 solicitudes, y el peor caso a 1000 por día, de las que como máximo 800 pueden ser ordinarias. La barrera, que es el evento crítico, se confirma sin esperar los 10 s, y la presencia se publica apenas se estabiliza, entre 1,0 y 1,5 s después del cambio físico; solo los cambios de distancia y de validez esperan la separación mínima. La histéresis de 3 cm es unas nueve veces mayor que el error por temperatura estimado en el umbral de 18 cm (≈ ±0,33 cm entre 10 y 30 °C, con v = 331,3 + 0,606·T m/s frente a los 343 m/s que usa el firmware). **Pendiente de demostrar:** el conteo de UPDATE de PNF-01 y el comportamiento de la histéresis en el banco (PF-02).
 5. **La seguridad de la vinculación es proporcional a un prototipo supervisado, y sus límites están identificados.** El análisis STRIDE (2.7) muestra que las amenazas de manipulación y elevación de privilegios tienen mitigaciones en el código: PIN ligado al destinatario, intentos atómicos, transacciones condicionales y una Lambda separada para generar el PIN. La probabilidad de acierto queda en ≈ 0,033 % por ventana. Quedan dos riesgos residuales sin mitigar: la cuenta de Alexa compartida y la ausencia de historial (repudio). **Confirmado por la captura de IAM:** el rol conserva `AWSIoTFullAccess` y `AmazonDynamoDBFullAccess`. Queda pendiente reemplazarlas por las políticas mínimas ya redactadas y validar el funcionamiento (3.2.6).
-6. **La concurrencia del firmware es simple y verificable porque cada recurso tiene un único dueño.** Las tres colas de un elemento y la regla *"solo `tick()` toca el hardware"* (3.1) eliminan los *mutex* y hacen que la cuota, la reconexión y la decisión de reporte vivan en una sola tarea, lo que permite probarlas en el PC. El precio es que la tarea de red solo ve la última muestra, y por eso el filtro de presencia reinicia su conteo tras un hueco de más de 630 ms. **Pendiente de demostrar:** la estabilidad durante 10–60 min con TLS real (PNF-01), que es donde podría aparecer una falta de memoria en la pila de 12 288 bytes.
+6. **La concurrencia del firmware es simple y verificable porque cada recurso tiene un único dueño.** Las tres colas de un elemento y la regla *"solo `tick()` toca el hardware"* (3.1) eliminan los *mutex* y hacen que la cuota, la reconexión y la decisión de reporte vivan en una sola tarea, lo que permite probarlas en el PC. El precio es que la tarea de red solo ve la última muestra, y por eso el filtro de presencia reinicia su conteo tras un hueco de más de 630 ms. **Resultado de banco:** PNF-01 registró 3 reinicios en 10 min y no cumplió estabilidad. Falta investigar su causa con el monitor serie; la hoja no permite atribuirlos a memoria, alimentación ni otra causa.
 7. **El actuador no tiene realimentación, y esa es la limitación técnica más importante del prototipo.** La confirmación de la barrera es una estimación de 700 ms (2.3.1): conservadora si el servo es más rápido, y errónea si se bloquea. Ninguna prueba automática puede detectarlo. **Pendiente de demostrar:** el recorrido real t_real en el video de PNF-03. La solución está en 7.2.
 8. **Aprendizajes del equipo.**
    - Medir y documentar el consumo de mensajes desde el diseño cambia decisiones de firmware (cuota en NVS, límite de demo).
