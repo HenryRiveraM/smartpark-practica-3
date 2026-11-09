@@ -48,7 +48,7 @@
 
 **Flujo general.**
 
-1. El ESP32 mide la distancia cada 500 ms con el HC-SR04 y publica en `state.reported` del Shadow la distancia, la presencia de vehículo y el estado de la barrera, por evento y con un respaldo periódico de 30 s.
+1. El ESP32 mide la distancia cada 500 ms con el HC-SR04 y publica en `state.reported` del Shadow la distancia, la presencia de vehículo y el estado de la barrera, por evento y con un respaldo periódico de 60 s.
 2. El administrador genera un PIN de 4 dígitos para un `userId` de Alexa y un Thing concretos. El PIN vale 300 s y admite 3 intentos.
 3. El usuario dice: *"Alexa, abre parqueo inteligente"* y luego *"vincula mi parqueo con el código …"*. La Lambda valida el PIN y guarda la asociación `userId → thingName` en DynamoDB.
 4. En sesiones posteriores, la Lambda resuelve el Thing a partir de `context.System.user.userId` sin pedir de nuevo el código.
@@ -63,10 +63,10 @@
 
 | Paso | Qué ocurre en el mundo físico | Qué ocurre en el sistema | Tiempo característico (según el código) |
 |---|---|---|---|
-| 1. Llegada | Un vehículo se detiene a menos de 15 cm del HC-SR04 (escala de maqueta). | `measure()` clasifica la lectura como `Present`. La tarea de red espera 3 muestras iguales y publica `vehiculo_detectado: true` (categoría `Sensor`). | 1,0–1,5 s para estabilizar (3 muestras × 500 ms), sin esperar el intervalo ordinario. |
+| 1. Llegada | Un vehículo se detiene a menos de 15 cm del HC-SR04 (escala de maqueta). | `measure()` clasifica la lectura como `Present`. La tarea de red espera 3 muestras iguales y publica `vehiculo_detectado: true` (categoría `Sensor`). | 1,0–1,5 s para estabilizar (3 muestras × 500 ms), más hasta 5 s si hubo otro reporte reciente. |
 | 2. Consulta | El usuario dice *"Alexa, abre parqueo inteligente"* y *"hay un vehículo esperando"*. | La Lambda lee la vinculación en DynamoDB y `reported.vehiculo_detectado` en el Shadow, y comprueba que el dato tenga ≤ 180 s. | Una llamada a DynamoDB y una al Shadow, cada una acotada a 0,5 s de conexión y 1 s de lectura. |
 | 3. Orden | El usuario dice *"abrir"*. | La Lambda escribe `desired.barrera = "abierta"` y responde *"Solicité abrir la barrera…"* sin esperar al dispositivo. | Una llamada a DynamoDB y una al Shadow. |
-| 4. Ejecución | La barrera sube a 90°. | AWS publica el `delta`, el ESP32 lo encola, `loop()` mueve el servo y, 700 ms después, publica `reported.barrera = "abierta"` (categoría `Control`, sin esperar los 10 s). | 700 ms estimados de recorrido más un ciclo de la tarea (20 ms). |
+| 4. Ejecución | La barrera sube a 90°. | AWS publica el `delta`, el ESP32 lo encola, `loop()` mueve el servo y, 700 ms después, publica `reported.barrera = "abierta"` (categoría `Control`, sin esperar los 5 s). | 700 ms estimados de recorrido más un ciclo de la tarea (20 ms). |
 | 5. Confirmación | El vehículo pasa. | El usuario dice *"consultar estado"* y la Lambda responde con el último `reported.barrera`. | Igual que el paso 2. |
 | 6. Cierre | La barrera baja. | *"cerrar"* repite los pasos 3 y 4 con `"cerrada"`. | Igual que los pasos 3 y 4. |
 
@@ -93,7 +93,7 @@
 
 - Permite responder dos consultas distintas: *distancia* y *vehículo esperando*.
 - Permite ajustar el umbral de detección por configuración, sin cambiar hardware.
-- Permite reportar por cambio significativo (≥ 10 cm) en lugar de cada lectura.
+- Permite reportar por cambio significativo (≥ 5 cm) en lugar de cada lectura.
 
 Las alternativas no cubren el caso:
 
@@ -130,7 +130,7 @@ Las alternativas no cubren el caso:
 | ID | Requerimiento | Cómo se cumple | Implementación |
 |---|---|---|---|
 | RF1 | Capturar datos con el sensor | Medición cada 500 ms con espera acotada de 30 ms. Clasifica la lectura en válida, timeout o fuera de rango y deriva la presencia con histéresis. | [`UltrasonicSensor::measure()`](../src/UltrasonicSensor.cpp#L11) |
-| RF2 | Reportar periódicamente el sensor y el estado del actuador en `reported` | Reporte por evento (Δ ≥ 10 cm, cambio de presencia o validez) y respaldo cada 30 s. Siempre publica los tres atributos. | [`AwsIoTManager::step()`](../src/AwsIoTManager.cpp#L260), [`report()`](../src/AwsIoTManager.cpp#L241) |
+| RF2 | Reportar periódicamente el sensor y el estado del actuador en `reported` | Reporte por evento (Δ ≥ 5 cm, cambio de presencia o validez) y respaldo cada 60 s. Siempre publica los tres atributos. | [`AwsIoTManager::step()`](../src/AwsIoTManager.cpp#L260), [`report()`](../src/AwsIoTManager.cpp#L241) |
 | RF3 | Recibir `delta`, aplicarlo al actuador y confirmar en `reported` | Suscripción a `update/delta`. `receive()` → `applyDesired()` → cola → `tick()` → `BarrierServo` → `report(Control)`. | [`receive()`](../src/AwsIoTManager.cpp#L189), [`applyDesired()`](../src/AwsIoTManager.cpp#L175), [`tick()`](../src/AwsIoTManager.cpp#L18) |
 | RF4 | Responder en español consultas del sensor leyendo `reported` del Thing vinculado | `GetThingShadow` y lectura de `state.reported.<campo>` con control de frescura de 180 s. | [`ConsultarDistanciaHandler`, `ConsultarVehiculoHandler`](../lambda/handlers/sensor_handlers.py), [`ShadowService.get_reported`](../lambda/services/shadow_service.py#L30) |
 | RF5 | Ejecutar comandos de voz modificando `desired` | `UpdateThingShadow` con `{"state":{"desired":{"barrera":…}}}`, sin lectura previa ni espera activa. | [`AbrirBarreraHandler`, `CerrarBarreraHandler`](../lambda/handlers/barrier_handlers.py), [`ShadowService.set_barrier`](../lambda/services/shadow_service.py#L61) |
@@ -144,14 +144,14 @@ Las alternativas no cubren el caso:
 | ID | Criterio de aceptación (qué se observa) | Prueba de banco o de extremo a extremo | Prueba automática |
 |---|---|---|---|
 | RF1 | El monitor serie muestra `Distancia: X cm` cada 500 ms. Con un objeto a 10 cm indica `Vehiculo detectado: SI`, y al tapar el sensor indica `invalida (timeout)` o `invalida (fuera de rango)`. | PF-01, PNF-02 | `test_main.cpp` (conversión, timeout, fuera de rango e histéresis) |
-| RF2 | En el cliente de prueba MQTT llega un `update/accepted` con el `clientToken` del ESP32 y los tres atributos: en reposo cada ≈ 30 s, y ≤ 10 s después de un cambio de ≥ 10 cm; presencia sin espera ordinaria. | PF-02, PF-03, PNF-04 | `test_aws.cpp` (distancia, presencia, periodo) |
-| RF3 | Tras escribir `desired.barrera`, el servo se mueve una sola vez y `reported.barrera` toma el mismo valor, sin que quede `delta`. | PF-04, PF-05, PN-13 | `test_aws.cpp` (comandos, espera de 700 ms, versiones) |
-| RF4 | La respuesta hablada coincide con el valor de `reported` del Thing del usuario. Con un dato de más de 180 s, responde *"desactualizado"*. | PF-14 a PF-16, PN-07, PN-08 | `test_valid_distance_reported_not_desired`, `test_presence_true_and_false`, `test_stale_per_field_even_when_document_is_new` |
-| RF5 | Tras *"abrir"*, el Shadow tiene `desired.barrera = "abierta"`, la respuesta empieza por *"Solicité abrir"* y no hay ninguna lectura previa del Shadow. | PF-11, PF-12 | `test_open_and_close_only_desired` |
-| RF6 | *"consultar estado"* repite el valor de `reported.barrera`, y con un valor desconocido responde con un error. | PF-13 | `test_barrier_state_reported`, `test_unknown_barrier_state` |
-| RF7 | Después de vincular, al cerrar y reabrir la skill, la bienvenida ofrece *"abrir, consultar estado, cerrar o salir"* y DynamoDB tiene la fila del usuario. | PF-07, PF-08, PN-02 a PN-05, PN-10 | `test_valid_binding_and_one_use_code`, `test_parallel_correct_consumption_succeeds_once` |
-| RF8 | Un usuario sin vinculación recibe la instrucción de vincularse y ninguna operación sobre el Shadow. | PF-06, PN-01 | `test_launch_unbound`, `test_no_binding_for_controls_or_queries` |
-| RF9 | Un PIN para un Thing inexistente no se genera. Cambiar reemplaza el Thing y desvincular borra la fila. | PF-09, PF-10, PN-06, PN-11, PN-12 | `test_existing_thing_required`, `test_change_binding`, `test_unbind_one_delete_no_get` |
+| RF2 | En el cliente de prueba MQTT llega un `update/accepted` con el `clientToken` del ESP32 y los tres atributos: en reposo cada ≈ 60 s, y ≤ 5 s después de un cambio de ≥ 5 cm o de presencia. | PF-03, PNF-01 | `test_aws.cpp` (distancia, presencia, periodo) |
+| RF3 | Tras escribir `desired.barrera`, el servo se mueve una sola vez y `reported.barrera` toma el mismo valor, sin que quede `delta`. | PF-04, PF-05, pruebas automáticas (sección 4) | `test_aws.cpp` (comandos, espera de 700 ms, versiones) |
+| RF4 | La respuesta hablada coincide con el valor de `reported` del Thing del usuario. Con un dato de más de 180 s, responde *"desactualizado"*. | PF-03, PF-06, pruebas automáticas (sección 4) | `test_valid_distance_reported_not_desired`, `test_presence_true_and_false`, `test_stale_per_field_even_when_document_is_new` |
+| RF5 | Tras *"abrir"*, el Shadow tiene `desired.barrera = "abierta"`, la respuesta empieza por *"Solicité abrir"* y no hay ninguna lectura previa del Shadow. | PF-04, PF-05 | `test_open_and_close_only_desired` |
+| RF6 | *"consultar estado"* repite el valor de `reported.barrera`, y con un valor desconocido responde con un error. | PF-06 | `test_barrier_state_reported`, `test_unknown_barrier_state` |
+| RF7 | Después de vincular, al cerrar y reabrir la skill, la bienvenida ofrece *"abrir, consultar estado, cerrar o salir"* y DynamoDB tiene la fila del usuario. | PF-07, PF-08, pruebas automáticas (sección 4) | `test_valid_binding_and_one_use_code`, `test_parallel_correct_consumption_succeeds_once` |
+| RF8 | Un usuario sin vinculación recibe la instrucción de vincularse y ninguna operación sobre el Shadow. | PF-07, pruebas automáticas (sección 4) | `test_launch_unbound`, `test_no_binding_for_controls_or_queries` |
+| RF9 | Un PIN para un Thing inexistente no se genera. Cambiar reemplaza el Thing y desvincular borra la fila. | Pruebas automáticas (sección 4) | `test_existing_thing_required`, `test_change_binding`, `test_unbind_one_delete_no_get` |
 
 ### 1.4 Requerimientos no funcionales
 
@@ -159,27 +159,27 @@ Cada RNF tiene un valor declarado verificable y una prueba asociada (sección 4.
 
 | ID | Atributo | Valor declarado | Justificación | Prueba |
 |---|---|---|---|---|
-| RNF1 | Estabilidad | ≥ 10 min de funcionamiento continuo sin reinicio ni bloqueo, con MQTT conectado. Objetivo de prueba: 60 min, la duración completa de la demo. | 10 min cubren una sesión de uso con varias llegadas, consultas y órdenes, y dejan pasar al menos 10 respaldos periódicos de 30 s. El firmware limita la sesión a 60 min conectados (`AWS_DEMO_MAX_CONNECTED_MS`), así que esa es la ventana natural de prueba. | PNF-01 |
+| RNF1 | Estabilidad | ≥ 10 min de funcionamiento continuo sin reinicio ni bloqueo, con MQTT conectado. Objetivo de prueba: 30 min, la duración completa de la demo. | 10 min cubren una sesión de uso con varias llegadas, consultas y órdenes, y dejan pasar al menos 10 respaldos periódicos de 60 s. El firmware limita la sesión a 30 min conectados (`AWS_DEMO_MAX_CONNECTED_MS`), así que esa es la ventana natural de prueba. | PNF-01 |
 | RNF2 | Exactitud de medición | **Propuesta:** error absoluto máximo ≤ 1 cm en el rango de trabajo de 5 a 50 cm. | El umbral de presencia es de 15 cm con 3 cm de histéresis: un error menor que la histéresis evita clasificar mal la presencia. El rango cubre el umbral con margen en una maqueta de banco. Por debajo de 5 cm el sensor se acerca a su distancia mínima (2 cm), y por encima de 50 cm el cono del haz capta objetos laterales del banco. La hoja de datos del HC-SR04 indica un ángulo efectivo de unos 15° y una resolución de alrededor de 0,3 cm. | PNF-02 |
-| RNF3 | Tiempo de respuesta | ≤ 3 s desde el fin de la frase del usuario hasta que el servo termina el recorrido estimado (Alexa → Lambda → Shadow → ESP32). | En una conversación, una espera de más de unos pocos segundos tras la respuesta de Alexa hace que el usuario repita la orden. El recorrido del servo aporta 700 ms estimados, y la Lambda no hace lecturas previas ni esperas activas, así que, descontando también ≈ 0,1 s de la tarea de red y de `loop()` (5.7), quedan ≈ 2,2 s para la voz, la nube y la red. | PNF-03 |
-| RNF4 | Frecuencia de reporte | Por evento: Δ distancia ≥ 10 cm, cambio de presencia (estable 3 muestras) o de validez, con separación ordinaria mínima de 10 s; presencia y control no esperan. Control: confirmación inmediata tras 700 ms. Respaldo periódico: 30 s. Intervalo máximo entre reportes con conexión y cuota disponibles: **30 s**. | Dinámica de la variable: un vehículo de maqueta se acerca en segundos, y la presencia es un evento discreto. Los 5 s y los 30 s protegen la cuota (2.6). La Lambda acepta datos de hasta 180 s, es decir, tolera dos respaldos perdidos. | PNF-04 |
-| RNF5 | Reconexión y sincronización | Reconexión automática Wi-Fi y MQTT con backoff exponencial de 5 s a 5 min con *jitter*, máximo 10 intentos consecutivos. Al reconectar, un único GET aplica el `desired` pendiente. **Propuesta:** con un corte de red ≤ 30 s, el `desired` pendiente se aplica y se confirma en `reported` en ≤ 30 s después de restaurar la red. | Evita tormentas de reconexión y gasto de cuota. El GET recupera órdenes dadas mientras el dispositivo estaba desconectado. | PNF-05 |
-| RNF6 | Consumo de mensajes | ≤ 1.000 solicitudes Shadow (GET + UPDATE) por día UTC y por dispositivo, contadas en NVS. 200 reservadas para control y recuperación. Sesión de demo ≤ 60 min conectados. | Protege la capa gratuita (2.6). El contador es una cota conservadora de intentos, no una medición de facturación. | PNF-06 |
-| RNF7 | Seguridad | Sin certificados, claves, Wi-Fi ni *access keys* en el repositorio. MQTT sobre TLS con X.509. Políticas IoT e IAM limitadas al Thing y a la tabla. PIN de un solo uso, 300 s y 3 intentos. Solicitudes Alexa validadas por Skill ID y antigüedad ≤ 150 s. | El actuador mueve un objeto físico: una credencial filtrada o una política amplia permitirían mover la barrera de otro usuario. TLS mutuo autentica a ambos extremos, las políticas acotan el daño de una credencial comprometida y la antigüedad máxima limita la reutilización de una solicitud capturada. | PNF-07 |
-| RNF8 | Calidad de código | POO modular, comentarios en las decisiones no obvias, compilación host con `-Wall -Wextra -Werror -pedantic` y pruebas automáticas del firmware y de la Lambda. | La lógica de cuota, reconexión, vinculación y concurrencia es difícil de probar en el banco. Las pruebas con dobles la ejercitan en segundos y sin consumir AWS, y `-Werror` impide que una advertencia del compilador llegue al firmware. | PNF-08 |
+| RNF3 | Tiempo de respuesta | ≤ 3 s desde el fin de la frase del usuario hasta que el servo termina el recorrido estimado (Alexa → Lambda → Shadow → ESP32). | En una conversación, una espera de más de unos pocos segundos tras la respuesta de Alexa hace que el usuario repita la orden. El recorrido del servo aporta 700 ms estimados, y la Lambda no hace lecturas previas ni esperas activas, así que, descontando también ≈ 0,1 s de la tarea de red y de `loop()` (estimación), quedan ≈ 2,2 s para la voz, la nube y la red. | PNF-03 |
+| RNF4 | Frecuencia de reporte | Por evento: Δ distancia ≥ 5 cm, cambio de presencia (estable 3 muestras) o de validez, con separación mínima de 5 s. Control: confirmación inmediata tras 700 ms. Respaldo periódico: 60 s. Intervalo máximo entre reportes con conexión y cuota disponibles: **60 s**. | Dinámica de la variable: un vehículo de maqueta se acerca en segundos, y la presencia es un evento discreto. Los 5 s y los 60 s protegen la cuota (2.6). La Lambda acepta datos de hasta 180 s, es decir, tolera dos respaldos perdidos. | PNF-01 (conteo de UPDATE), pruebas automáticas (sección 4) |
+| RNF5 | Reconexión y sincronización | Reconexión automática Wi-Fi y MQTT con backoff exponencial de 5 s a 5 min con *jitter*, máximo 10 intentos por arranque. Al reconectar, un único GET aplica el `desired` pendiente. **Propuesta:** con un corte de red ≤ 30 s, el `desired` pendiente se aplica y se confirma en `reported` en ≤ 60 s después de restaurar la red. | Evita tormentas de reconexión y gasto de cuota. El GET recupera órdenes dadas mientras el dispositivo estaba desconectado. | PNF-04 |
+| RNF6 | Consumo de mensajes | ≤ 200 solicitudes Shadow (GET + UPDATE) por día UTC y por dispositivo, contadas en NVS. 30 reservadas para control. Sesión de demo ≤ 30 min conectados. | Protege la capa gratuita (2.6). El contador es una cota conservadora de intentos, no una medición de facturación. | Pruebas automáticas (sección 4) |
+| RNF7 | Seguridad | Sin certificados, claves, Wi-Fi ni *access keys* en el repositorio. MQTT sobre TLS con X.509. Políticas IoT e IAM limitadas al Thing y a la tabla. PIN de un solo uso, 300 s y 3 intentos. Solicitudes Alexa validadas por Skill ID y antigüedad ≤ 150 s. | El actuador mueve un objeto físico: una credencial filtrada o una política amplia permitirían mover la barrera de otro usuario. TLS mutuo autentica a ambos extremos, las políticas acotan el daño de una credencial comprometida y la antigüedad máxima limita la reutilización de una solicitud capturada. | Pruebas automáticas (sección 4) y verificación estática (sección 4.2) |
+| RNF8 | Calidad de código | POO modular, comentarios en las decisiones no obvias, compilación host con `-Wall -Wextra -Werror -pedantic` y pruebas automáticas del firmware y de la Lambda. | La lógica de cuota, reconexión, vinculación y concurrencia es difícil de probar en el banco. Las pruebas con dobles la ejercitan en segundos y sin consumir AWS, y `-Werror` impide que una advertencia del compilador llegue al firmware. | Pruebas automáticas (sección 4) |
 
 **Medición, justificación técnica y riesgo de cada RNF.**
 
 | ID | Cómo se mide | Por qué ese valor | Riesgo si no se cumple |
 |---|---|---|---|
-| RNF1 | Monitor serie con marcas de tiempo. El banner de arranque no debe reaparecer y `STATUS` muestra `reconexiones=0`. | Supera varias veces el respaldo de 30 s y el timeout de 15 s del Shadow, así que expone fugas de memoria o bloqueos acumulativos de la tarea de red. | Reinicios que consumen GET de recuperación e intentos de conexión (10 por arranque). Si se agotan, el dispositivo queda solo en modo local. |
+| RNF1 | Monitor serie con marcas de tiempo. El banner de arranque no debe reaparecer y `STATUS` muestra `reconexiones=0`. | Supera varias veces el respaldo de 60 s y el timeout de 15 s del Shadow, así que expone fugas de memoria o bloqueos acumulativos de la tarea de red. | Reinicios que consumen GET de recuperación e intentos de conexión (10 por arranque). Si se agotan, el dispositivo queda solo en modo local. |
 | RNF2 | Cinta métrica y 5 lecturas por distancia (PNF-02); error absoluto máximo. | La banda de histéresis mide 3 cm: un error menor que 1 cm mantiene cada lectura del lado correcto del umbral salvo en una franja de ±1 cm junto a 15 y 18 cm. | Presencias falsas o perdidas y reportes `Sensor` innecesarios que consumen cuota. |
 | RNF3 | Video a ≥ 30 fps con el simulador y el servo en el mismo cuadro (PNF-03). | Coincide con el tiempo que un usuario espera tras una respuesta de voz antes de repetir la orden. | El usuario repite la orden. Como el diseño consolida órdenes iguales, no hay doble movimiento, pero sí más invocaciones y lecturas. |
-| RNF4 | Cliente de prueba MQTT y contadores de `STATUS` (PNF-04). | 30 s mantienen los datos dentro de la ventana de 180 s de la Lambda aunque se pierdan dos respaldos. 5 s acotan la cuota (2.6). | Con intervalos mayores, la skill responde *"desactualizado"*. Con intervalos menores, se agota la cuota ordinaria antes de terminar la demo. |
-| RNF5 | Corte controlado del punto de acceso (PNF-05). | El GET de reconexión es la única vía para recuperar una orden dada sin conexión, porque el `delta` no se reenvía. | Órdenes perdidas o aplicadas tarde. Un backoff mal acotado agota los 10 intentos o genera tormentas de reconexión. |
-| RNF6 | Diferencias de `solicitudesTotales` en `STATUS` (PNF-06). | 1.000 solicitudes alcanzan para una demo de 60 min con margen (2.6) y reservan 200 para confirmar órdenes. | Gasto no previsto en la cuenta o, en el extremo opuesto, que se pierda la confirmación de las órdenes. |
-| RNF7 | Búsqueda estática en Git y pruebas dinámicas de TLS (PNF-07). | Las credenciales X.509 identifican al dispositivo ante AWS: si se filtran, otro cliente puede hacerse pasar por él. | Suplantación del dispositivo, órdenes de terceros o publicación de credenciales en GitHub. |
-| RNF8 | Ejecución de las tres suites (PNF-08). | 0 *warnings* y 100 % PASS es el único umbral que no deja errores conocidos sin resolver. | Regresiones no detectadas en la lógica de cuota o de vinculación, que en el banco son lentas y caras de reproducir. |
+| RNF4 | Cliente de prueba MQTT y contadores de `STATUS` (PNF-01). | 60 s mantienen los datos dentro de la ventana de 180 s de la Lambda aunque se pierdan dos respaldos. 5 s acotan la cuota (2.6). | Con intervalos mayores, la skill responde *"desactualizado"*. Con intervalos menores, se agota la cuota ordinaria antes de terminar la demo. |
+| RNF5 | Corte controlado del punto de acceso (PNF-04). | El GET de reconexión es la única vía para recuperar una orden dada sin conexión, porque el `delta` no se reenvía. | Órdenes perdidas o aplicadas tarde. Un backoff mal acotado agota los 10 intentos o genera tormentas de reconexión. |
+| RNF6 | Cálculo de 2.6 y pruebas automáticas de `ShadowBudget` (sección 4); `STATUS` muestra `solicitudesTotales`. | 200 solicitudes alcanzan para una demo de 30 min con margen (2.6) y reservan 30 para confirmar órdenes. | Gasto no previsto en la cuenta o, en el extremo opuesto, que se pierda la confirmación de las órdenes. |
+| RNF7 | Búsqueda estática en Git (sección 4.2) y pruebas automáticas (sección 4). | Las credenciales X.509 identifican al dispositivo ante AWS: si se filtran, otro cliente puede hacerse pasar por él. | Suplantación del dispositivo, órdenes de terceros o publicación de credenciales en GitHub. |
+| RNF8 | Ejecución de las tres suites (pruebas automáticas, sección 4). | 0 *warnings* y 100 % PASS es el único umbral que no deja errores conocidos sin resolver. | Regresiones no detectadas en la lógica de cuota o de vinculación, que en el banco son lentas y caras de reproducir. |
 
 ---
 
@@ -534,7 +534,7 @@ classDiagram
 
 1. **`main.cpp` orquesta y no decide.** Instancia los cuatro objetos, mide cada 500 ms y llama a `aws.tick()` en cada vuelta de `loop()`. No contiene lógica de red ni de cuota.
 2. **Un solo dueño por recurso.** Solo la tarea FreeRTOS `smartpark-aws` (pila de 12 288 bytes, prioridad 1) toca Wi-Fi, MQTT y NVS. Solo `loop()`, a través de `tick()`, toca el sensor y el servo. Ambos lados se comunican mediante tres colas de **un elemento** (`xQueueOverwrite`): siempre se usa la última muestra y la última orden, sin acumular datos viejos.
-3. **`ShadowBudget` es una política pura**, sin E/S, con cuatro categorías (`Periodic`, `Sensor`, `Control`, `Recovery`). `allows()` permite las categorías ordinarias hasta `limit − reserved` (800) y `Control`/`Recovery` hasta `limit` (1.000). `AwsIoTManager` persiste el registro en NVS **antes** de publicar.
+3. **`ShadowBudget` es una política pura**, sin E/S, con cuatro categorías (`Periodic`, `Sensor`, `Control`, `Recovery`). `allows()` permite las categorías ordinarias hasta `limit − reserved` (170) y `Control` hasta `limit` (200). `AwsIoTManager` persiste el registro en NVS **antes** de publicar.
 4. **Extensibilidad.** Un sensor nuevo replica el patrón de `UltrasonicSensor` (`begin()`, `measure()`, `lastMeasurement()`), agrega campos a `Snapshot` y una línea en `report()`. Un actuador nuevo replica `BarrierServo` y agrega una rama en `applyDesired()`.
 
 **Patrones de diseño presentes en el firmware**
@@ -621,7 +621,7 @@ stateDiagram-v2
     state "TLS y MQTT connect con 5 suscripciones" as TLS
     state "Backoff exponencial con jitter" as Backoff
     state "Intentos agotados - 10 por arranque" as Agotado
-    state "Demo finalizada - 60 min conectados" as Demo
+    state "Demo finalizada - 30 min conectados" as Demo
     state Conectado {
         state "GET pendiente" as GetP
         state "Sincronizado" as Sync
@@ -645,14 +645,14 @@ stateDiagram-v2
     TLS --> Backoff : connect o subscribe fallan
     TLS --> Conectado : intento + 1 y GET con clientToken
     Conectado --> Backoff : conexion perdida o GET sin respuesta en 15 s
-    Conectado --> Demo : 60 min conectados acumulados
+    Conectado --> Demo : 30 min conectados acumulados
     Backoff --> WiFi : ventana vencida sin Wi-Fi
     Backoff --> TLS : ventana vencida con Wi-Fi y hora
     Backoff --> Agotado : intentos ≥ 10
     WiFi --> Agotado : intentos ≥ 10
 ```
 
-El diagrama sale de [`run()`](../src/AwsIoTManager.cpp#L72-L92), [`connectStep()`](../src/AwsIoTManager.cpp#L125-L167), [`failedAttempt()`](../src/AwsIoTManager.cpp#L114-L124), [`receive()`](../src/AwsIoTManager.cpp#L189-L240) y [`step()`](../src/AwsIoTManager.cpp#L260-L337). Cuentan como intento cada `WiFi.begin()`, cada `failedAttempt()` y también la conexión exitosa, pero el GET válido reinicia los intentos tras el arranque. Las ventanas de espera se duplican desde 5 s hasta 300 s, con un *jitter* de 0 a 999 ms. Sin cuota para el GET de recuperación, `connectStep()` retorna sin consumir intentos y el dispositivo queda desconectado. En *Informes suspendidos* la conexión sigue abierta: el ESP32 todavía recibe y ejecuta los `delta`, pero no publica hasta reconectar. *Demo finalizada*, *Intentos agotados* y *Envíos bloqueados* solo se abandonan reiniciando la placa, y en los tres el sensor, el servo y la consola serie siguen activos.
+El diagrama sale de [`run()`](../src/AwsIoTManager.cpp#L72-L92), [`connectStep()`](../src/AwsIoTManager.cpp#L125-L167), [`failedAttempt()`](../src/AwsIoTManager.cpp#L114-L124), [`receive()`](../src/AwsIoTManager.cpp#L189-L240) y [`step()`](../src/AwsIoTManager.cpp#L260-L337). Cuentan como intento cada `WiFi.begin()`, cada `failedAttempt()` y también la conexión exitosa, así que un arranque normal consume 2 de los 10 (Wi-Fi y MQTT). Las ventanas de espera se duplican desde 5 s hasta 300 s, con un *jitter* de 0 a 999 ms. Sin cuota para el GET de recuperación, `connectStep()` retorna sin consumir intentos y el dispositivo queda desconectado. En *Informes suspendidos* la conexión sigue abierta: el ESP32 todavía recibe y ejecuta los `delta`, pero no publica hasta reconectar. *Demo finalizada*, *Intentos agotados* y *Envíos bloqueados* solo se abandonan reiniciando la placa, y en los tres el sensor, el servo y la consola serie siguen activos.
 
 **Diagrama de actividad de la decisión de reporte**
 
@@ -677,13 +677,13 @@ flowchart TD
     N --> O{"Sincronizado, sin informe en curso, sin suspension y barrera lista?"}
     O -- no --> FIN(["fin del paso"])
     O -- si --> P{"control: orden pendiente o barrera distinta de la confirmada?"}
-    P -- si --> Q["Clase Control - no espera los 10 s"]
-    P -- no --> R{"sensor: cambio de validez, de presencia estable o distancia 10 cm o mas?"}
+    P -- si --> Q["Clase Control - no espera los 5 s"]
+    P -- no --> R{"sensor: cambio de validez, de presencia estable o distancia 5 cm o mas?"}
     R -- si --> S["Clase Sensor"]
-    R -- no --> T{"30 s o mas desde el ultimo reporte?"}
+    R -- no --> T{"60 s o mas desde el ultimo reporte?"}
     T -- si --> U["Clase Periodic"]
     T -- no --> V["Sin envio - omitida si hubo muestra nueva"]
-    S --> W{"Presencia confirmada o 10 s desde la ultima publicacion?"}
+    S --> W{"5 s o mas desde la ultima publicacion?"}
     U --> W
     W -- no --> X["Omitida - contador como maximo 1 vez por segundo"]
     W -- si --> Y
@@ -692,7 +692,7 @@ flowchart TD
     Y -- si --> Z["report - reserva en NVS antes de publicar y publica update"]
 ```
 
-La prioridad es fija: **Recovery > Control > presencia > distancia > Periodic**. Una orden ejecutada se confirma sin esperar el intervalo mínimo, y si había otro informe pendiente de acuse con el estado anterior de la barrera, se abandona (su reserva no se devuelve y su `accepted` tardío se ignora por el `clientToken`). El reintento por falta de `accepted` no es un mecanismo aparte: al vencer los 15 s, el paso siguiente vuelve a comparar `current_` con `confirmed_`, que no cambió, y genera un informe nuevo con un token nuevo. Cada intento consume cuota, y tras el tercero se suspenden los informes. La cuota se verifica dos veces: aquí, con `allows()`, y en `report()`, con `reserve()`, que además la persiste.
+La prioridad es fija: **Control > Sensor > Periodic**. Una orden ejecutada se confirma sin esperar el intervalo mínimo, y si había otro informe pendiente de acuse con el estado anterior de la barrera, se abandona (su reserva no se devuelve y su `accepted` tardío se ignora por el `clientToken`). El reintento por falta de `accepted` no es un mecanismo aparte: al vencer los 15 s, el paso siguiente vuelve a comparar `current_` con `confirmed_`, que no cambió, y genera un informe nuevo con un token nuevo. Cada intento consume cuota, y tras el tercero se suspenden los informes. La cuota se verifica dos veces: aquí, con `allows()`, y en `report()`, con `reserve()`, que además la persiste.
 
 #### 2.3.2 Función Lambda (backend de la skill)
 
@@ -961,9 +961,9 @@ sequenceDiagram
         ML->>TASK: tick - xQueueOverwrite snapshots_
     end
     TASK->>TASK: step - presencia estable tras 3 muestras
-    alt presencia confirmada sin espera, o distancia 10 cm/validez con 10 s desde el ultimo envio
+    alt cambio de 5 cm o mas, de presencia o de validez, y 5 s desde el ultimo envio
         TASK->>SH: publish shadow update - reported, categoria Sensor
-    else 30 s desde el ultimo reporte
+    else 60 s desde el ultimo reporte
         TASK->>SH: publish shadow update - reported, categoria Periodic
     else sin cambios relevantes o sin cuota
         TASK->>TASK: no publica y cuenta una omision
@@ -1033,7 +1033,7 @@ sequenceDiagram
             ML->>SV: open - servo a 90 grados
             Note over SV: recorrido estimado 700 ms, sin sensor de posicion
             ML->>TASK: snapshot con ready y applied
-            TASK->>SH: report Control - reported barrera abierta, sin esperar los 10 s
+            TASK->>SH: report Control - reported barrera abierta, sin esperar los 5 s
             SH-->>TASK: update accepted - controlPending pasa a false
         else ESP32 desconectado
             Note over SH,TASK: el delta no llega y la orden queda guardada en desired
@@ -1114,7 +1114,7 @@ Solo se publica en `…/shadow/get` y `…/shadow/update`. No hay suscripción a
 - Cada GET o UPDATE propio lleva un `clientToken` aleatorio con número de secuencia (`%08lx-%lu`). Una respuesta `accepted` o `rejected` solo se considera propia si trae el mismo token. Así no se confunde el `accepted` de una orden dada desde la consola con la confirmación del ESP32.
 - `version_` guarda la última versión procesada. Un `delta` con versión menor o igual se descarta, y un GET más viejo que un `delta` ya procesado no pisa el estado.
 
-**Regla de frescura en la Lambda.** [`ShadowService.get_reported`](../lambda/services/shadow_service.py#L44) rechaza un campo cuya marca de tiempo tenga más de `MAX_REPORTED_AGE_SECONDS` (180 s por defecto) o esté más de 30 s en el futuro. Con un respaldo periódico de 30 s, un dispositivo conectado y con cuota no llega a los 180 s. Si los supera, es porque se desconectó o agotó su cuota ordinaria, y la skill lo dice en lugar de responder con un dato viejo.
+**Regla de frescura en la Lambda.** [`ShadowService.get_reported`](../lambda/services/shadow_service.py#L44) rechaza un campo cuya marca de tiempo tenga más de `MAX_REPORTED_AGE_SECONDS` (180 s por defecto) o esté más de 30 s en el futuro. Con un respaldo periódico de 60 s, un dispositivo conectado y con cuota no llega a los 180 s. Si los supera, es porque se desconectó o agotó su cuota ordinaria, y la skill lo dice en lugar de responder con un dato viejo.
 
 **Ciclo de vida de cada atributo**
 
@@ -1138,36 +1138,79 @@ Solo se publica en `…/shadow/get` y `…/shadow/update`. No hay suscripción a
 
 ### 2.6 Política de reporte
 
-| Parámetro | Valor |
-|---|---|
-| Lectura HC-SR04 | 500 ms |
-| Presencia estable | 3 muestras consecutivas; se reinicia el filtro ante muestras perdidas |
-| Umbral / histéresis de presencia | 15 cm / 3 cm (ausente desde 18 cm) |
-| Cambio significativo de distancia | ≥ 10 cm respecto al último estado confirmado |
-| Separación ordinaria | 10 s desde la última solicitud |
-| Respaldo | 30 s desde el último UPDATE intentado |
-| Movimiento SG90 | 700 ms estimados; sin realimentación física |
-| Presupuesto diario UTC | 1.000 GET + UPDATE intentados por dispositivo |
-| Reserva de control y recuperación | 200 solicitudes; informes ordinarios bloqueados al llegar a 800 totales |
-| Demo por arranque | 3.600.000 ms MQTT conectado acumulado (60 min) |
+| Parámetro (`config.h`) | Valor | Justificación por la dinámica de la variable |
+|---|---|---|
+| `SENSOR_INTERVAL_MS` | 500 ms | Una muestra cada medio segundo capta el acercamiento de un vehículo de maqueta. El sensor bloquea como máximo 30 ms por lectura. |
+| `AWS_PRESENCE_STABLE_SAMPLES` | 3 | La presencia solo cambia si 3 muestras consecutivas coinciden (≈ 1,5 s). Filtra ecos espurios sin perder un vehículo que se detiene. |
+| `VEHICLE_DETECTION_CM` / `DETECTION_HYSTERESIS_CM` | 15 cm / 3 cm | Presente si ≤ 15 cm y ausente si ≥ 18 cm. La banda de 3 cm evita oscilaciones con el objeto cerca del umbral. |
+| `AWS_DISTANCE_CHANGE_THRESHOLD_CM` | 5 cm | Una variación menor que 5 cm no cambia la decisión de abrir y no genera envíos. |
+| `AWS_MIN_PUBLISH_INTERVAL_MS` | 5 s | Separación mínima entre reportes ordinarios (Sensor y Periodic). Las confirmaciones de control no esperan este intervalo. |
+| `AWS_REPORT_INTERVAL_MS` | 60 s | Respaldo periódico. Refresca las marcas de tiempo para que la Lambda siga aceptando el dato (umbral de 180 s). |
+| `AWS_MAX_SHADOW_UPDATES_PER_DAY` | 200 | Techo diario de GET + UPDATE intentados, persistido en NVS. |
+| `AWS_RESERVED_CONTROL_UPDATES` | 30 | A partir de 170 solicitudes, solo se permiten confirmaciones de control. |
+| `AWS_DEMO_MAX_CONNECTED_MS` | 1 800 000 ms (30 min) | Límite de tiempo conectado por arranque. |
+| `SERVO_TRAVEL_MS` | 700 ms | Espera antes de confirmar un cambio de barrera. |
 
-Prioridad: sincronización GET, confirmación de barrera, presencia confirmada, distancia significativa y respaldo. Control y presencia no esperan los 10 s ordinarios. La presencia puede desplazar un reporte anterior pendiente de acuse; su token tardío se ignora y su consumo no se devuelve. Un control pendiente conserva prioridad. Todos los envíos requieren hora UTC válida, NVS disponible y presupuesto para su categoría. La presencia usa presupuesto ordinario, nunca la reserva.
+**Estimación de solicitudes para una demo de 30 min.** Se calcula solo con los valores anteriores; es una **estimación de diseño, no una medición de AWS**:
 
-El delta válido se entrega inmediatamente a la cola del loop que maneja el servo. Tras el recorrido estimado se publica la barrera; `barrera_posicion_estimada: true` hace explícita la ausencia de realimentación. Se conservan `barrera`, `distancia_cm` y `vehiculo_detectado`, así como los controles de token, duplicados y versiones.
+| Escenario | Cálculo | Solicitudes del dispositivo |
+|---|---|---|
+| Reposo (sin cambios) | 1 GET inicial + 0 o 1 sincronización de barrera (Control, ver c₀ más abajo) + 30 min / 60 s ≈ 29–30 respaldos | **≈ 30–32** |
+| Con 10 órdenes de voz | Reposo + 10 confirmaciones de control | ≈ 40–42 |
+| Peor caso ordinario (cambios constantes) | 30 min / 5 s = 360 posibles, pero se cortan en el techo de 170 ordinarias | **≤ 170** + hasta 30 de control = **≤ 200** |
+| Referencia: conectado todo el día sin límite de demo | 24 h × 60 respaldos por hora | 1 440. Por eso existen el límite de 30 min y la cuota. |
 
-El total incluye Recovery, Control, Sensor y Periodic. Los ordinarios solo se autorizan si el total previo es menor que 800; Control y Recovery hasta 1.000. Por ello, los controles anteriores también reducen el margen ordinario. Se persiste cada intento antes de MQTT. El registro NVS mantiene estructura y magic: actualizar desde la configuración de 200 solicitudes conserva, por ejemplo, las 172 ya consumidas. Solo un día UTC posterior válido reinicia los contadores; reiniciar, retroceder el reloj o fallar NVS no repone cuota.
+Además, cada UPDATE aceptado genera del lado de AWS un mensaje `update/accepted` hacia el ESP32 y, si hay diferencia, un `delta`. La Lambda suma una llamada `GetThingShadow` por consulta y una `UpdateThingShadow` por orden. Estas operaciones **no** entran en el contador local del firmware.
 
-Estimación de diseño, sin reintentos y con una cuota diaria inicialmente disponible: una hora en reposo genera aproximadamente 1 GET + 0–1 sincronización inicial + 119–120 respaldos = 120–122 solicitudes. Diez órdenes adicionales pueden sumar diez confirmaciones. Cambios continuos de distancia producen como máximo unas 360 oportunidades ordinarias por hora; los cambios de presencia tienen otra cadencia y pueden agotar antes el tramo ordinario. En todos los casos el límite diario total es 1.000, compartido entre sesiones del mismo día. Estas cifras no incluyen llamadas de Lambda, DynamoDB, otras aplicaciones ni facturación de conectividad/mensajería AWS.
+**Cálculo detallado de la estimación.** Las variables salen de [`config.example.h`](../include/config.example.h):
 
-**Diagnóstico del estado WiFi conectado / MQTT desconectado / 172 solicitudes.** La configuración previa tenía techo 200, reserva 30 y bloqueo ordinario desde 170. `ShadowBudget::allows()` clasificaba Recovery como ordinario; `connectStep()` retornaba antes de TLS al comprobar esa categoría. Es un bloqueo lógico reproducible con cuota de recuperación disponible. La configuración nueva habilita Recovery hasta el techo total y no borra el consumo anterior.
+- T_demo = 1 800 s (`AWS_DEMO_MAX_CONNECTED_MS`)
+- T_per = 60 s (`AWS_REPORT_INTERVAL_MS`)
+- T_min = 5 s (`AWS_MIN_PUBLISH_INTERVAL_MS`)
+- L = 200 (`AWS_MAX_SHADOW_UPDATES_PER_DAY`)
+- R = 30 (`AWS_RESERVED_CONTROL_UPDATES`)
+- N_ord = órdenes de voz; N_rec = reconexiones; E_S = cambios relevantes del sensor
 
-Ese diagnóstico no prueba la causa única del incidente físico: el mensaje anterior agrupaba cuota, hora y NVS. Un fallo NTP, retroceso de día UTC, registro corrupto, error de escritura, límite de intentos, backoff activo o error de TLS/MQTT también impiden conectar. `conectadoAcumulado=0` y `reconexiones=0` son contadores del arranque; las 172 solicitudes son persistentes y pueden corresponder a otro arranque. `STATUS` ahora separa NVS, hora UTC, disponibilidad de recuperación, estado MQTT, intentos y espera restante. No se han realizado llamadas reales para atribuir una causa de infraestructura.
+*Lo que cuenta el firmware* (cada solicitud se reserva en NVS antes de enviarse):
 
-Se mantiene backoff exponencial con jitter (5 s a 5 min) y un límite de 10 intentos consecutivos. Una sincronización GET válida (incluido 404) reinicia ese contador: las reconexiones sanas no agotan un límite acumulado de toda la demo. Con errores continuos se conserva la suspensión para no martillar la red. GET sin respuesta fuerza reconexión tras 15 s; UPDATE tiene hasta 3 intentos. Un rechazo suspende informes hasta reconectar. Certificados, TLS y políticas permanecen intactos.
+| Categoría | Fórmula | Comentario |
+|---|---|---|
+| `Recovery` (GET) | N_GET = 1 + N_rec | Un GET por conexión, nunca por lectura. |
+| `Control` | N_C = N_ord + c₀ | c₀ = 1 si, tras el GET, el Shadow no tenía `reported.barrera` o difería de la posición tras el arranque (siempre cerrada). Si no, c₀ = 0. |
+| `Sensor` | N_S = min(E_S, ⌊T_demo / T_min⌋) = min(E_S, 360) | Cada reporte exige ≥ 5 s desde la publicación anterior. |
+| `Periodic` | N_P ≤ ⌈T_demo / T_per⌉ = 30 | Cualquier reporte reinicia el contador de 60 s (`lastReport_`), así que la actividad **reduce** los periódicos. |
+| Restricciones | N_GET + N_S + N_P ≤ L − R = 170; N_total ≤ L = 200 | Por día UTC, no por sesión. |
 
-La desconexión por duración se evalúa en cada paso de la tarea de red; una operación de socket en curso puede retrasarla unos segundos. Es un límite lógico de 60 minutos, no una garantía de temporización dura. El tiempo se conserva entre reconexiones del mismo arranque; NVS conserva la cuota entre arranques.
+| Escenario (30 min) | Supuestos | N_GET | N_C | N_S | N_P | Total |
+|---|---|---|---|---|---|---|
+| Reposo | N_ord = 0, E_S = 0, sin reconexiones | 1 | 0–1 | 0 | 29–30 | **30–32** |
+| Actividad moderada (ilustrativa) | 10 vehículos con 2 reportes `Sensor` cada uno (llegada y salida) y 2 órdenes (abrir y cerrar) | 1 | 20–21 | 20 | ≤ 30 | **≤ 72** |
+| Peor caso | Cambios continuos de ≥ 5 cm | 1 | hasta 30 | hasta 169 | — | **≤ 200** (las ordinarias se agotan tras ≈ 170 × 5 s ≈ 14 min) |
 
-Validación local: `sh test/run_host_tests.sh` usa dobles de Wi-Fi, MQTT/TLS, reloj de milisegundos, NVS y RTOS, con ArduinoJson real. Comprueba ambos tramos de cuota hasta 1.000, reserva Recovery, debounce de 3 muestras, umbrales/intervalos, prioridad, servo a 700 ms, reconexión Wi-Fi/MQTT, desired pendiente por GET, NVS previo de 172 solicitudes y corte en la frontera de 60 min. Las pruebas de banco y la conectividad real permanecen pendientes; las pruebas locales no llaman AWS.
+*Lo que genera AWS y no cuenta el firmware:*
+
+| Origen | Por evento | Fórmula en 30 min |
+|---|---|---|
+| Respuesta a cada UPDATE del ESP32 | 1 mensaje `update/accepted` (o `rejected`) hacia el dispositivo | N_S + N_P + N_C |
+| Respuesta a cada GET | 1 mensaje `get/accepted` (o `rejected`) | N_GET |
+| Cada orden de voz | 1 `UpdateThingShadow` HTTPS de la Lambda, 1 `delta` hacia el ESP32 y 1 `update/accepted` de esa escritura, que el ESP32 recibe porque está suscrito y descarta por el `clientToken` | N_ord · (1 llamada + 2 mensajes) |
+| Cada consulta de voz | 1 `GetItem` y 1 `GetThingShadow` | N_q · 2 llamadas |
+| Cada orden de voz (lado DynamoDB) | 1 `GetItem` de la vinculación | N_ord |
+| Primera solicitud de cada contenedor Lambda | 1 `DescribeEndpoint` si no se configuró `IOT_DATA_ENDPOINT` | ≤ número de contenedores |
+
+En reposo, el ESP32 recibe ≈ N_total mensajes de respuesta, además del PING de MQTT cada 120 s (*keepalive*), que no es una operación del Shadow. **No se incluyen precios**: la tarifa depende de la región, del plan de la cuenta y de su capa gratuita, y debe consultarse en la [página oficial de precios de AWS IoT Core](https://aws.amazon.com/iot-core/pricing/) en la fecha en que se haga la estimación.
+
+**Relación con la capa gratuita.** Los 200 por día son un **límite local académico**, como indica el comentario de `config.example.h`, y no la cuota oficial de AWS. Mantienen el uso diario bajo y predecible. El costo real depende de la cuenta (elegibilidad, créditos y fecha de alta) y debe revisarse en la [tarifa oficial de IoT Core](https://aws.amazon.com/iot-core/pricing/) y en Billing.
+
+> ⏳ **PENDIENTE (manual):** verificar en AWS Billing → *Free Tier* el uso real de AWS IoT, Lambda y DynamoDB después de la demo y guardar la captura en `docs/images/evidencias/aws-iot/billing-free-tier.png`.
+
+**Compromiso entre latencia de eventos y cuota.** Para eventos discretos, reportar en el orden de 1 s minimizaría la latencia, pero el diseño usa **5 s de separación mínima** para los reportes del sensor. La decisión es deliberada:
+
+- Con 1 s, un objeto en movimiento podría generar hasta 1 800 solicitudes en 30 min y agotaría las 170 ordinarias en menos de 3 min.
+- El evento crítico del caso de uso, el cambio de la barrera, **no espera** esos 5 s: se confirma apenas termina el recorrido estimado de 700 ms.
+- La presencia necesita 3 muestras iguales (3 × 500 ms): queda estable entre 1,0 y 1,5 s después del cambio físico, según en qué momento del ciclo de 500 ms ocurra. Si el último reporte fue hace menos de 5 s, se publica cuando se cumplen esos 5 s. La latencia sigue siendo aceptable para una consulta por voz, que el usuario hace después de llegar.
+
+Con más cuota disponible, bastaría con bajar `AWS_MIN_PUBLISH_INTERVAL_MS` (7.6).
 
 ### 2.7 Diseño del mecanismo de vinculación
 
@@ -1298,7 +1341,7 @@ Los dos registros nacen juntos en una transacción de dos `Put` ([`pairing_servi
 | Repudio (*Repudiation*) | Un usuario niega haber abierto la barrera | Ninguna: los logs no registran el `userId` ni las órdenes, por diseño (privacidad) | No hay historial de accesos (ver 7.10). |
 | Divulgación (*Information disclosure*) | Credenciales en el repositorio o en los logs | `secrets.h` y `config.h` en `.gitignore`; PIN guardado solo como hash; logs con solo el tipo de error | Los hashes de un PIN de 4 dígitos se invierten por fuerza bruta: la tabla debe tratarse como dato administrativo. El endpoint IoT está en `config.example.h` (7.5). |
 | Denegación de servicio (*Denial of service*) | Un atacante gasta los 3 intentos o genera solicitudes inválidas | Ventana por usuario; formatos imposibles rechazados sin llamar a AWS; cuota del firmware | Puede bloquear la vinculación de ese usuario durante 5 min; las invocaciones rechazadas también tienen costo. |
-| Denegación de servicio | Tormenta de reconexiones o de reportes del dispositivo | Backoff de 5 s a 5 min, 10 intentos consecutivos, límite de demo y 1.000 solicitudes por día | Tras agotar los intentos, el dispositivo queda solo en modo local hasta reiniciarlo. |
+| Denegación de servicio | Tormenta de reconexiones o de reportes del dispositivo | Backoff de 5 s a 5 min, 10 intentos por arranque, límite de demo y 200 solicitudes por día | Tras agotar los intentos, el dispositivo queda solo en modo local hasta reiniciarlo. |
 | Elevación de privilegios (*Elevation of privilege*) | Usar la skill pública para generar PIN o leer el Thing de otro | La generación está en otra Lambda, con otro rol y otro paquete; el Thing sale de DynamoDB y nunca de un slot (`test_control_ignores_arbitrary_thing_slot`) | Mientras el rol de la Lambda tenga políticas *FullAccess*, un fallo del código tendría permisos de más (3.2.6). |
 
 **Comparación con otras alternativas.**
@@ -1475,8 +1518,8 @@ smartpark-practica-3/
 2. **Colas de un elemento.** `snapshots_`, `commands_` y `statuses_` usan `xQueueOverwrite`: siempre se procesa el último dato y no hay *backlog* de órdenes viejas. Órdenes opuestas intermedias se consolidan en la última.
 3. **Solo `tick()` toca hardware.** La tarea de red nunca llama al servo: deja la orden en la cola y `loop()` la ejecuta. Así se evitan carreras entre núcleos sobre el PWM.
 4. **Cuota en NVS.** Cada reserva se escribe en flash **antes** de publicar y nunca se devuelve. El día se toma de NTP (`epoch / 86400`). Si el reloj retrocede o el registro NVS es inválido, los envíos se bloquean. Un reinicio en el mismo día no repone la cuota.
-5. **Backoff con *jitter*.** Los reintentos empiezan en 5 s, se duplican hasta 300 s y suman un *jitter* aleatorio de 0 a 999 ms. Hay como máximo 10 intentos consecutivos, y un GET válido reinicia ese contador.
-6. **Límite de demo.** Al acumular 60 min conectado, el dispositivo envía DISCONNECT, apaga el Wi-Fi y no vuelve a conectarse hasta reiniciar. El sensor y el servo siguen funcionando en modo local.
+5. **Backoff con *jitter*.** Los reintentos empiezan en 5 s, se duplican hasta 300 s y suman un *jitter* aleatorio de 0 a 999 ms. Hay como máximo 10 intentos por arranque, y una conexión exitosa no repone ese contador.
+6. **Límite de demo.** Al acumular 30 min conectado, el dispositivo envía DISCONNECT, apaga el Wi-Fi y no vuelve a conectarse hasta reiniciar. El sensor y el servo siguen funcionando en modo local.
 7. **Validación de solicitudes en la Lambda.** Antes de crear clientes AWS se comprueban el Skill ID (`ALEXA_SKILL_ID`), el `requestId`, la antigüedad (−30 a 150 s) y el `userId` del contexto y de la sesión.
 8. **Transacciones condicionales.** La generación (2 Put) y la vinculación (Delete + Put + Update) son atómicas, con condiciones que impiden reutilizar un PIN o pisar una vinculación más nueva.
 9. **Sin reintentos ocultos del SDK.** `Config(retries={"total_max_attempts": 1})`, con conexión de 0,5 s y lectura de 1 s. Un timeout tras una orden física **no** se reintenta, para no duplicar órdenes; el usuario recibe el mensaje *"consulta su estado antes de repetir la orden"*.
@@ -1564,24 +1607,23 @@ void AwsIoTManager::applyDesired(const char* value) {
 }
 ```
 
-*F3 — Decisión de reporte en `step()`* ([L313–L320](../src/AwsIoTManager.cpp#L313-L320)). Combina control, evento de sensor y respaldo periódico; control y presencia ignoran la separación ordinaria de 10 s:
+*F3 — Decisión de reporte en `step()`* ([L313–L320](../src/AwsIoTManager.cpp#L313-L320)). Combina control, evento de sensor y respaldo periódico; el control ignora la separación de 5 s:
 
 ```cpp
 bool control = controlPending_ || !haveConfirmed_ || !confirmed_.ready || current_.open != confirmed_.open;
-bool presence = stableCount_ >= AWS_PRESENCE_STABLE_SAMPLES && stablePresence_ != confirmed_.presence;
-bool sensor = presence || current_.valid != confirmed_.valid ||
+bool sensor = current_.valid != confirmed_.valid || (current_.valid ? stablePresence_ : -1) != confirmed_.presence ||
     (current_.valid && fabsf(current_.distance-confirmed_.distance) >= AWS_DISTANCE_CHANGE_THRESHOLD_CM);
 bool periodic = now-lastReport_ >= AWS_REPORT_INTERVAL_MS;
 // ...
 ShadowBudget::Kind kind = control ? ShadowBudget::Control : (sensor ? ShadowBudget::Sensor : ShadowBudget::Periodic);
-bool interval = control || presence || now-lastPublish_ >= AWS_MIN_PUBLISH_INTERVAL_MS;
+bool interval = control || now-lastPublish_ >= AWS_MIN_PUBLISH_INTERVAL_MS;
 ```
 
 *F4 — Reserva para control en `ShadowBudget`* ([`include/ShadowBudget.h` L22–L24](../include/ShadowBudget.h#L22-L24)):
 
 ```cpp
 bool allows(Kind kind, uint32_t limit, uint32_t reserved) const {
-    return total() < ((kind == Control || kind == Recovery) ? limit : (reserved <= limit ? limit-reserved : 0));
+    return total() < (kind == Control ? limit : limit-reserved);
 }
 ```
 
@@ -1803,99 +1845,13 @@ Los intents de Amazon no necesitan frases propias: el modelo integrado de Alexa 
 - Una prueba no funcional se aprueba si el indicador medido cumple el valor declarado en 1.4.
 - Mientras una prueba no se haya ejecutado, su resultado y su estado quedan en **⏳ Pendiente**.
 
-**Matriz de cobertura.** Para cada requisito, indica qué pruebas lo ejercitan en cada nivel. Las pruebas del firmware no tienen nombre de función: se identifican por el archivo y por el bloque que las contiene.
-
-| Requisito | Pruebas automáticas (N1 y N2) | Banco (N3) | Extremo a extremo (N4) |
-|---|---|---|---|
-| RF1 | `test_main.cpp`: conversión de 700 µs a 12,005 cm, `Timeout`, `OutOfRange` e histéresis (960 µs ≈ 16,46 cm conserva `Present`) | PF-01, PNF-02, PNF-09 | — |
-| RF2 | `test_aws.cpp`: distancia (Δ ≥ 10 cm), presencia estable con 3 muestras, periodo de 30 s y separación ordinaria de 10 s | PF-02, PF-03, PNF-04 | — |
-| RF3 | `test_aws.cpp`: `delta` → cola, espera hasta `ready`, `reported` sin `desired`, versión atrasada y GET con `desired` pendiente | PF-04, PF-05, PN-13, PR-01, PR-02 | PF-11, PF-12 |
-| RF4 | `test_valid_distance_reported_not_desired`, `test_distance_integer_format`, `test_presence_true_and_false`, `test_unknown_presence_not_absence`, `test_stale_per_field_even_when_document_is_new`, `test_future_timestamp`, `test_invalid_json_and_oversize_close_stream`, `test_shadow_not_found` | — | PF-14 a PF-16, PN-07, PN-08, PR-03 |
-| RF5 | `test_open_and_close_only_desired`, `test_iot_update_timeout_no_retry`, `test_timeout_after_physical_request_closes_without_inviting_repetition` | — | PF-11, PF-12, PR-05 |
-| RF6 | `test_barrier_state_reported`, `test_unknown_barrier_state` | — | PF-13 |
-| RF7 | `test_valid_binding_and_one_use_code`, `test_wrong_pin_consumes_an_attempt_without_reading_pair`, `test_parallel_guesses_never_exceed_three`, `test_last_attempt_can_be_correct`, `test_parallel_correct_consumption_succeeds_once`, `test_counter_survives_new_service_instance`, `test_generated_pin_can_bind_once_and_cannot_rearm_early` | — | PF-07, PF-08, PN-02 a PN-05, PN-10, PR-04 |
-| RF8 | `test_launch_unbound`, `test_no_binding_for_controls_or_queries`, `test_unbound_user_error_closes_without_physical_action`, `test_session_user_cannot_override_context_user` | — | PF-06, PN-01, PR-06 |
-| RF9 | `test_existing_thing_required`, `test_thing_not_found`, `test_change_binding`, `test_binding_race_does_not_replace_newer_binding`, `test_unbind_one_delete_no_get`, `test_unbind_missing` | — | PF-09, PF-10, PN-06, PN-11, PN-12 |
-| RNF1 | — | PNF-01 | PNF-01 |
-| RNF2 | `test_main.cpp` (conversión) | PNF-02, PNF-09 | — |
-| RNF3 | `test_aws.cpp` (el control no espera los 10 s) | — | PNF-03 |
-| RNF4 | `test_aws.cpp` (separación mínima, periodo y omisiones) | PNF-04 | — |
-| RNF5 | `test_aws.cpp` (backoff, límite de intentos y GET tras reconectar) | PNF-05 | PNF-05 |
-| RNF6 | `test_aws.cpp` (`ShadowBudget`, reserva de 200, NVS restaurada, NVS corrupta y escritura fallida) | PNF-06, PNF-10 | — |
-| RNF7 | `test_wrong_skill_or_missing_config`, `test_old_request_rejected`, `test_logs_omit_user_code_and_aws_details`, `test_alexa_cannot_route_admin_json_fields`, `test_admin_rejects_alexa_envelopes_before_creating_clients` | PNF-07 | PN-09, PN-14 |
-| RNF8 | Las tres suites | PNF-08 | — |
-
-**Relación con [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md).** Ese documento ya define el banco y 14 validaciones del firmware contra AWS, sin Alexa. Este plan **no las duplica**: las reutiliza como paso de banco y les agrega Alexa y las mediciones de los RNF.
-
-| Validación de `PRUEBAS_AWS.md` | Prueba de este informe |
-|---|---|
-| #1 Conexión NTP + MQTT/TLS | PNF-01 (inicio), PNF-07 |
-| #2 Un GET por conexión | PNF-06 |
-| #3 y #4 `desired` abierta / cerrada | PF-04, PF-05 |
-| #5 `reported` y `accepted` propios | PF-04, PF-05 |
-| #6 Δ ≥ 10 cm con 10 s de separación | PF-03, PNF-04 |
-| #7 Presencia con 3 muestras e histéresis, sin apertura automática | PF-15, PF-16, PF-22, PNF-09 |
-| #8 Sin UPDATE extra antes de 30 s | PF-02, PNF-04 |
-| #9 Corte de Wi-Fi y backoff | PNF-05 |
-| #10 `desired` pendiente aplicado tras reconectar | PNF-05 |
-| #11 Contadores de `STATUS` y persistencia de la cuota | PNF-06, PNF-10 |
-| #12 Límite y reserva de control | PNF-06 (opcional, con una placa de prueba) |
-| #13 Límite de demo | PNF-01 |
-| #14 Modo local sin Wi-Fi | PNF-05 |
+Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware contra AWS, sin Alexa) se reutilizan como paso previo de PF-02 a PF-05, PNF-01 y PNF-04.
 
 ### 4.1 Pruebas funcionales
 
 **Preparación común:** firmware cargado y conectado (`STATUS` muestra `MQTT/TLS=conectado`), Lambda y skill configuradas, y simulador de Alexa en *Development*. Las frases se dicen dentro de una sesión abierta con *"Alexa, abre parqueo inteligente"*. Para las pruebas de vinculación, el administrador genera el PIN justo antes.
 
-**Pruebas positivas.**
-
-| ID | RF | Procedimiento | Entrada (frase exacta) | Resultado esperado (texto del handler) | Cobertura automática | Resultado obtenido | Evidencia | Estado |
-|---|---|---|---|---|---|---|---|---|
-| PF-01 | RF1 | Colocar un objeto a 10, 20 y 30 cm y enviar `DISTANCE` por serie | `DISTANCE` | `Distancia: ≈10.0 / 20.0 / 30.0 cm` y `Vehiculo detectado: SI / NO / NO` | `test_main.cpp` (conversión e histéresis) | ⏳ | `evidencias/pruebas/pf01-serial.png` | ⏳ Pendiente |
-| PF-02 | RF2 | Dejar el banco en reposo 3 min y observar `update/accepted` en el cliente de prueba MQTT | — | Un UPDATE cada ≈ 30 s con los 3 atributos | #8 host | ⏳ | `evidencias/aws-iot/pf02-mqtt.png` | ⏳ Pendiente |
-| PF-03 | RF2 | Mover el objeto de 30 a 40 cm | — | UPDATE de categoría Sensor ≤ 10 s después, con la nueva `distancia_cm` | #6 host | ⏳ | `evidencias/aws-iot/pf03-mqtt.png` | ⏳ Pendiente |
-| PF-04 | RF3 | Publicar desde la consola `{"state":{"desired":{"barrera":"abierta"}}}` | — | Serie: `AWS comando recibido: abierta`. El servo abre. `reported.barrera = "abierta"` con el `clientToken` del ESP32. | #3, #5 host | ⏳ | `evidencias/aws-iot/pf04-shadow.png` + video | ⏳ Pendiente |
-| PF-05 | RF3 | Igual que PF-04 con `"cerrada"` | — | El servo cierra. `reported.barrera = "cerrada"`. | #4, #5 host | ⏳ | `evidencias/aws-iot/pf05-shadow.png` | ⏳ Pendiente |
-| PF-06 | RF8 | Usuario sin vincular abre la skill | "Alexa, abre parqueo inteligente" | "Bienvenido a parqueo inteligente. Primero pide un código al administrador y di: vincula mi parqueo con el código, seguido de los cuatro dígitos." | `test_launch_unbound` | ⏳ | `evidencias/alexa/pf06.png` | ⏳ Pendiente |
-| PF-07 | RF7 | Generar el PIN y vincular | "vincula mi parqueo con el código {PIN}" | "Tu parqueo quedó vinculado. Ya puedes consultar sus datos o solicitar abrir y cerrar la barrera." | `test_valid_binding_and_one_use_code` | ⏳ | `evidencias/alexa/pf07.png` | ⏳ Pendiente |
-| PF-08 | RF7 | Cerrar la skill, volver a abrirla y verificar en DynamoDB la fila del usuario (*Explore items* por clave) | "Alexa, abre parqueo inteligente" | "Bienvenido a parqueo inteligente. Puedes decir abrir, consultar estado, cerrar o salir." | `test_launch_bound` | ⏳ | `evidencias/alexa/pf08.png` | ⏳ Pendiente |
-| PF-09 | RF9 | Tras 5 min, generar otro PIN (puede ser para otro Thing) | "cambia mi vinculación con el código {PIN2}" | "Tu parqueo quedó vinculado. …". Si es el mismo Thing: "Ese parqueo ya está vinculado a tu usuario. El código fue consumido." | `test_change_binding`, `test_same_binding_consumes_pin` | ⏳ | `evidencias/alexa/pf09.png` | ⏳ Pendiente |
-| PF-10 | RF9 | Usuario vinculado | "desvincula mi parqueo" | "Desvinculé tu parqueo." | `test_unbind_one_delete_no_get` | ⏳ | `evidencias/alexa/pf10.png` | ⏳ Pendiente |
-| PF-11 | RF5 | Usuario vinculado, barrera cerrada | "abrir" | "Solicité abrir la barrera. Puedes consultar su estado para conocer el último reporte del dispositivo." Luego `desired.barrera = "abierta"` y el servo abre. | `test_open_and_close_only_desired` | ⏳ | `evidencias/alexa/pf11.png` + video | ⏳ Pendiente |
-| PF-12 | RF5 | Barrera abierta | "cierra la barrera" | "Solicité cerrar la barrera. …". El servo cierra. | ídem | ⏳ | `evidencias/alexa/pf12.png` | ⏳ Pendiente |
-| PF-13 | RF6 | 2 s después de PF-11 | "consultar estado" | "Según el último estado reportado, la barrera está abierta." | `test_barrier_state_reported` | ⏳ | `evidencias/alexa/pf13.png` | ⏳ Pendiente |
-| PF-14 | RF4 | Objeto a 25 cm | "a qué distancia está el vehículo" | "La última distancia reportada es de 25 centímetros." (con el valor real, con coma decimal) | `test_valid_distance_reported_not_desired` | ⏳ | `evidencias/alexa/pf14.png` | ⏳ Pendiente |
-| PF-15 | RF4 | Objeto a 10 cm durante ≥ 2 s | "hay un vehículo esperando" | "El último reporte indica que hay un vehículo esperando." | `test_presence_true_and_false` | ⏳ | `evidencias/alexa/pf15.png` | ⏳ Pendiente |
-| PF-16 | RF4 | Objeto retirado (≥ 18 cm) durante ≥ 2 s | "consultar vehículo" | "El último reporte indica que no hay un vehículo esperando." | ídem | ⏳ | `evidencias/alexa/pf16.png` | ⏳ Pendiente |
-| PF-17 | — | Dentro de la sesión | "ayuda" | "Dentro de SmartPark puedes decir abrir, cerrar, consultar estado, consultar distancia o consultar vehículo. Para terminar, di salir o cancelar. …" | `test_help_and_fallback_are_clear_and_do_not_call_aws` | ⏳ | `evidencias/alexa/pf17.png` | ⏳ Pendiente |
-| PF-18 | — | Dentro de la sesión | "salir" | "Hasta luego." y la sesión se cierra | `test_stop_and_cancel_close_without_aws_calls` | ⏳ | `evidencias/alexa/pf18.png` | ⏳ Pendiente |
-| PF-19 | — | Dentro de la sesión | "cancelar" | "Hasta luego." | ídem | ⏳ | `evidencias/alexa/pf19.png` | ⏳ Pendiente |
-| PF-20 | — | Dentro de la sesión | "pide una pizza" | "No reconocí esa solicitud. Di abrir, cerrar, consultar estado, consultar distancia o consultar vehículo. Para terminar, di salir. También puedes pedir ayuda." | ídem | ⏳ | `evidencias/alexa/pf20.png` | ⏳ Pendiente |
-| PF-21 | — | Encadenar abrir → consultar estado → cerrar → salir sin reabrir la skill | Diálogo de 2.8 | Las 4 respuestas en una sola sesión | `test_launch_open_state_close_stop_with_same_session` | ⏳ | `evidencias/alexa/pf21.png` | ⏳ Pendiente |
-| PF-22 | — | Mantener un objeto a 10 cm durante 10 s **sin** dar órdenes | — | La barrera **no** se abre (control solo por voz) | `test_main.cpp` ("Sensor detecta, pero nunca abre la barrera") | ⏳ | `evidencias/pruebas/pf22-video.mp4` | ⏳ Pendiente |
-
-**Pruebas negativas.**
-
-| ID | RF | Procedimiento | Entrada | Resultado esperado | Cobertura automática | Resultado obtenido | Evidencia | Estado |
-|---|---|---|---|---|---|---|---|---|
-| PN-01 | RF8 | Usuario sin vinculación | "abrir" | "No tienes un parqueo vinculado. Pide un código al administrador y di: vincula mi parqueo con el código, seguido de los cuatro dígitos." No hay cambios en el Shadow. | `test_no_binding_for_controls_or_queries`, `test_unbound_user_error_closes_without_physical_action` | ⏳ | `evidencias/alexa/pn01.png` | ⏳ Pendiente |
-| PN-02 | RF7 | Ventana activa; decir un PIN distinto del generado | "vincula mi parqueo con el código {PIN incorrecto}" | "El código no es válido, caducó, no está autorizado o se agotaron los intentos. Solicita ayuda al administrador." `remainingAttempts` baja de 3 a 2. | `test_wrong_pin_consumes_an_attempt_without_reading_pair` | ⏳ | `evidencias/alexa/pn02.png` | ⏳ Pendiente |
-| PN-03 | RF7 | Esperar más de 300 s tras generar y decir el PIN correcto | "vincula mi parqueo con el código {PIN}" | Mismo mensaje de rechazo | `test_expired_code` | ⏳ | `evidencias/alexa/pn03.png` | ⏳ Pendiente |
-| PN-04 | RF7 | Reutilizar un PIN ya consumido (con `Cambiar`) | "cambia mi vinculación con el código {PIN usado}" | Mismo mensaje de rechazo | `test_valid_binding_and_one_use_code` | ⏳ | `evidencias/alexa/pn04.png` | ⏳ Pendiente |
-| PN-05 | RF7 | 3 PIN incorrectos y luego el correcto | 4 intentos | Los 4 se rechazan, incluido el correcto | `test_parallel_guesses_never_exceed_three` | ⏳ | `evidencias/alexa/pn05.png` | ⏳ Pendiente |
-| PN-06 | RF9 | Generar un PIN para un Thing inexistente en `SmartParkPairingAdmin` | `{"allowedUserId": "amzn1.ask.account.…", "thingName": "no-existe-01"}` | `{"error": "El Thing solicitado no existe."}` | `test_existing_thing_required`, `test_thing_not_found` | ⏳ | `evidencias/aws-iot/pn06-admin.png` | ⏳ Pendiente |
-| PN-07 | RF4 | Desconectar el ESP32, esperar más de 3 min y consultar | "consultar distancia" | "El último dato del dispositivo está desactualizado. No puedo confirmar su estado actual." | `test_stale_per_field_even_when_document_is_new` | ⏳ | `evidencias/alexa/pn07.png` | ⏳ Pendiente |
-| PN-08 | RF4 | Tapar el sensor o apuntarlo al vacío (timeout o fuera de rango) hasta que se reporte `null` y consultar | "consultar distancia" | "No tengo un dato reportado válido y reciente del dispositivo." (el `null` borró el atributo) | `test_invalid_distances`, `test_unknown_presence_not_absence` | ⏳ | `evidencias/alexa/pn08.png` | ⏳ Pendiente |
-| PN-09 | — | Probar en la consola de Lambda `events/open.json` con un `applicationId` distinto del configurado (timestamp actualizado con `refresh_event.py`) | Evento JSON | "No pude validar la solicitud de Alexa. Abre la skill de nuevo." | `test_wrong_skill_or_missing_config` | ⏳ | `evidencias/aws-iot/pn09-lambda.png` | ⏳ Pendiente |
-| PN-10 | RF7 | Usuario ya vinculado intenta vincular de nuevo | "vincula mi parqueo con el código {PIN}" | "Ya tienes un parqueo vinculado. Para reemplazarlo di: cambia mi vinculación con el código, seguido del nuevo código." | `test_valid_binding_and_one_use_code` | ⏳ | `evidencias/alexa/pn10.png` | ⏳ Pendiente |
-| PN-11 | RF9 | Usuario sin vinculación intenta cambiar | "cambia mi vinculación con el código {PIN}" | "Todavía no tienes una vinculación. Di: vincula mi parqueo con el código, seguido de tu código." | `test_change_without_existing_binding` | ⏳ | `evidencias/alexa/pn11.png` | ⏳ Pendiente |
-| PN-12 | RF9 | Usuario sin vinculación | "desvincula mi parqueo" | "No tienes un parqueo vinculado." | `test_unbind_missing` | ⏳ | `evidencias/alexa/pn12.png` | ⏳ Pendiente |
-| PN-13 | RF3 | Publicar desde la consola `{"state":{"desired":{"barrera":"media"}}}` | — | Serie: `AWS: desired.barrera invalida, ignorada`. El servo no se mueve. | — (solo banco) | ⏳ | `evidencias/pruebas/pn13-serial.png` | ⏳ Pendiente |
-| PN-14 | — | Probar en Lambda un evento con un timestamp de más de 150 s | Evento JSON | "No pude validar la solicitud de Alexa. Abre la skill de nuevo." | `test_old_request_rejected` | ⏳ | `evidencias/aws-iot/pn14-lambda.png` | ⏳ Pendiente |
-
-**Pruebas de robustez.** Comprueban que una entrada anómala no mueve la barrera, no repite operaciones y no deja al sistema en un estado inconsistente.
-
-| ID | Situación | Procedimiento | Resultado esperado (según el código) | Prueba automática | Resultado obtenido | Estado |
+| ID | RF | Procedimiento | Resultado esperado | Resultado obtenido | Evidencia | Estado |
 |---|---|---|---|---|---|---|
 | PF-01 | RF1 | Coloca un objeto a 10, 20 y 30 cm del HC-SR04 y observa el monitor serie. | El monitor serie muestra mediciones cercanas a las distancias reales. | ⏳ | — | ⏳ Pendiente |
 | PF-02 | RF1 | Acerca un objeto a 10 cm y después aléjalo por encima de 18 cm. | Cambia de vehículo presente a vehículo ausente, con histéresis: presente a 15 cm o menos y ausente desde 18 cm. | ⏳ | — | ⏳ Pendiente |
@@ -1908,198 +1864,12 @@ Los intents de Amazon no necesitan frases propias: el modelo integrado de Alexa 
 
 ### 4.2 Pruebas no funcionales
 
-Cada protocolo indica su objetivo, materiales, procedimiento, repeticiones, forma de registro e indicador. Los registros se guardan en `docs/images/evidencias/pruebas/`.
-
-**PNF-01 · Estabilidad (RNF1)**
-
-- **Objetivo:** ≥ 10 min continuos sin reinicio ni bloqueo, con MQTT conectado.
-- **Materiales:** montaje completo y monitor serie con marcas de tiempo (`pio device monitor --filter time`).
-- **Procedimiento:**
-  1. Arrancar el ESP32 y enviar `STATUS` en t = 0.
-  2. Durante la prueba, cada 2 min mover el objeto y dar una orden de abrir o cerrar desde Alexa.
-  3. Enviar `STATUS` en t = 5 min y t = 10 min (y en t = 60 min si se busca el objetivo extendido).
-  4. Comprobar que el banner `=== SmartPark - ESP32 / Fase 2 ===` no reaparece (un reinicio lo imprime de nuevo) y que las lecturas siguen saliendo cada 500 ms.
-- **Repeticiones:** 1 corrida de 10 min (objetivo extendido: 60 min, hasta que se active el límite de demo).
-- **Registro:** archivo del monitor serie (`pnf01-serial.txt`) y 3 capturas de `STATUS`.
-- **Indicador:** tiempo continuo sin reinicio = t(último `STATUS`) − t(arranque). `reconexiones` en `STATUS` = 0 esperado.
-
-**PNF-02 · Exactitud de medición (RNF2)**
-
-- **Objetivo:** error absoluto máximo ≤ 1 cm en 5–50 cm (valor propuesto).
-- **Materiales:** cinta métrica o regla rígida, superficie plana perpendicular al sensor (cartón de al menos 15 × 15 cm) y termómetro opcional.
-- **Procedimiento:**
-  1. Fijar el sensor y alinear la cinta con el frente de los transductores.
-  2. Para cada distancia de referencia d_ref ∈ {5, 10, 15, 20, 30, 40, 50} cm, colocar la superficie y esperar 2 s.
-  3. Enviar `DISTANCE` 5 veces, separadas por al menos 1 s, y anotar d_med.
-  4. Anotar la temperatura ambiente.
-- **Repeticiones:** 7 distancias × 5 lecturas = 35 mediciones.
-- **Registro:** tabla 5.2 y captura serie de cada distancia.
-- **Indicadores:**
-  - Error absoluto: e_i = |d_med,i − d_ref|.
-  - Error medio por distancia: ē = (1/n)·Σ e_i.
-  - Error máximo: e_max = max(e_i).
-  - Criterio: e_max ≤ 1 cm en todo el rango.
-- **Fuentes de error de la propia medición:**
-  - La alineación del cero de la cinta con el frente de los transductores introduce un error sistemático. Se reduce fijando la cinta al soporte del sensor y midiendo el cero una sola vez.
-  - La lectura de la cinta tiene una resolución de ±0,5 mm con una regla milimetrada.
-  - Si la superficie no es perpendicular, el eco recorre más distancia. Se controla con una escuadra.
-  - La temperatura cambia la velocidad del sonido (5.7). Se anota para poder corregirla después.
-
-**PNF-03 · Tiempo de respuesta de extremo a extremo (RNF3)**
-
-- **Objetivo:** ≤ 3 s desde el fin de la frase hasta que el servo termina el recorrido.
-- **Materiales:** celular grabando a ≥ 30 fps con el altavoz o la pantalla del simulador y el servo en el mismo cuadro; opcionalmente, un cronómetro.
-- **Procedimiento:**
-  1. Con la sesión abierta, decir "abrir" (o escribirlo en el simulador y pulsar Enter).
-  2. En el video, marcar t₀ = fin de la frase (o pulsación de Enter) y t₁ = el servo se detiene en 90°.
-  3. Repetir alternando "abrir" y "cerrar".
-- **Repeticiones:** ≥ 10 (5 aperturas y 5 cierres).
-- **Registro:** tabla 5.3 y video `pnf03.mp4`.
-- **Indicadores:**
-  - t_i = t₁ − t₀.
-  - Promedio: t̄ = (1/n)·Σ t_i.
-  - Máximo: t_max.
-  - Desviación estándar: s = √(Σ (t_i − t̄)² / (n − 1)).
-  - Criterio: t_max ≤ 3 s.
-- **Análisis:** separar el aporte del servo (≈ 0,7 s estimados) del tiempo de nube y de red, comparando con el instante en que aparece `AWS comando recibido` en el serie (si se graba también la pantalla del monitor).
-- **Fuentes de error de la propia medición:**
-  - A 30 fps cada cuadro dura ≈ 33 ms, así que marcar t₀ y t₁ por cuadros da una incertidumbre de ±1 cuadro en cada extremo (≈ ±67 ms en t).
-  - El fin de una frase hablada es difuso. Escribir la orden en el simulador y tomar como t₀ el cuadro en que se pulsa Enter elimina esa ambigüedad, a costa de excluir el reconocimiento de voz.
-  - El instante en que el servo se detiene se aprecia mejor con una marca de color en el brazo.
-  - Con cronómetro manual, el tiempo de reacción humano (del orden de 0,2 s en cada pulsación) domina el error: por eso el video es el método principal.
-
-**PNF-04 · Frecuencia de reporte (RNF4)**
-
-- **Objetivo:** en reposo, un reporte cada ≈ 30 s; con cambios de distancia, reportes separados ≥ 10 s (presencia/control prioritarios); intervalo máximo ≤ 30 s.
-- **Materiales:** cliente de prueba MQTT de AWS IoT suscrito a `$aws/things/smartpark-grupo9-01/shadow/update/accepted` y `STATUS`.
-- **Procedimiento:**
-  1. **Reposo:** `STATUS` en t = 0. Dejar el banco quieto 10 min. `STATUS` en t = 10 min. Contar los `accepted` del ESP32 (los que traen su `clientToken`).
-  2. **Con cambios:** repetir 10 min moviendo el objeto ±10 cm cada 2 s.
-- **Repeticiones:** 1 corrida de cada escenario.
-- **Registro:** capturas del cliente MQTT, `STATUS` antes y después y tabla 5.1.
-- **Indicadores:**
-  - Número de UPDATE = Δ(`Shadow UPDATE`) de `STATUS`.
-  - Intervalo medio = 600 s / UPDATE.
-  - Esperado en reposo: ≈ 20 UPDATE.
-  - Esperado con cambios: ≤ 60 UPDATE de distancia (600 s / 10 s), y nunca dos ordinarios a menos de 10 s; presencia/control pueden sumar reportes.
-
-**PNF-05 · Reconexión y sincronización (RNF5)**
-
-- **Objetivo:** reconexión automática y aplicación del `desired` pendiente; propuesta de ≤ 30 s tras restaurar la red (corte ≤ 30 s).
-- **Materiales:** punto de acceso Wi-Fi controlable (hotspot del celular), simulador de Alexa, cronómetro y monitor serie.
-- **Procedimiento:**
-  1. Con la barrera cerrada y confirmada, apagar el hotspot (t_corte).
-  2. Verificar que el serie sigue midiendo cada 500 ms (modo local, validación #14).
-  3. Decir "abrir" en Alexa. La respuesta debe ser *"Solicité abrir…"* y `desired.barrera` queda en "abierta".
-  4. A los 30 s, encender el hotspot (t_rest).
-  5. Anotar t_apl, cuando el serie muestra `AWS comando recibido: abierta` tras el GET, y t_conf, cuando aparece `reported.barrera = "abierta"`.
-- **Repeticiones:** 3.
-- **Registro:** archivo serie y tabla 5.4.
-- **Indicadores:**
-  - Tiempo de recuperación = t_conf − t_rest.
-  - Intentos consumidos = líneas `AWS WiFi: intento n/10`.
-  - Criterio: t_conf − t_rest ≤ 30 s y servo abierto.
-- **Lo que predice el código.** Al detectar la pérdida, `failedAttempt()` programa la siguiente ventana. Las ventanas posteriores se abren a ≈ 5, 15, 35 y 75 s de la pérdida (esperas de 5, 10, 20 y 40 s, más hasta 1 s de *jitter* en cada una), y cada `WiFi.begin()` consume un intento. Si el driver no se reasocia solo (el firmware usa `setAutoReconnect(false)`), con un corte de 30 s el `WiFi.begin()` útil es el de ≈ 35 s y la conexión MQTT ocurre en la ventana de ≈ 75 s: t_conf − t_rest ≈ 45–49 s, más el GET y el reporte de control. Esa reconexión consume ≈ 5 intentos, que se reinician tras el GET válido. Es una estimación derivada del código, no una medición. El tiempo que tarda PubSubClient en detectar la pérdida no está acotado en el código.
-- **Fuentes de error de la propia medición:**
-  - Anotar t_rest a mano introduce el tiempo de reacción y la demora del celular en activar el hotspot. Se reduce leyendo las marcas de tiempo del monitor serie (`--filter time`) para t_apl y t_conf, y anotando t_rest cuando el celular indica que el hotspot está activo.
-  - Si el ESP32 se reasocia solo antes de lo previsto, la medición sale más corta que la predicción: hay que dejarlo registrado.
-
-**PNF-06 · Consumo de mensajes (RNF6)**
-
-- **Objetivo:** ≤ 1.000 solicitudes por día y estimación de ≈ 120–122 en una demo de 60 min en reposo.
-- **Procedimiento:**
-  1. `STATUS` al inicio y al final de cada sesión de pruebas.
-  2. Calcular las diferencias por categoría (`periodicas`, `sensor`, `control` y `GET`).
-  3. Reiniciar una vez sin borrar la flash y verificar que los contadores **no** vuelven a 0 el mismo día UTC (validación #11).
-- **Registro:** tabla 5.5 y capturas de `STATUS`.
-- **Indicador:** solicitudes totales = Δ(`solicitudesTotales`). Comparar con la estimación de 2.6.
-
-**PNF-07 · Seguridad (RNF7)**
-
-Verificación estática sobre los archivos rastreados por Git (8 de noviembre de 2026):
-
-| Verificación | Comando | Resultado real |
-|---|---|---|
-| `secrets.h` y `config.h` ignorados | `git check-ignore -v include/secrets.h include/config.h` | Ignorados por `.gitignore` líneas 8 y 9 ✅ |
-| `.pio/` y `.vscode/` ignorados | `git check-ignore -v .pio .vscode/settings.json` | Ignorados (líneas 1 y 11) ✅ |
-| Ninguno de los dos está rastreado | `git ls-files include/secrets.h include/config.h` | Sin resultados ✅ |
-| Certificados o claves PEM | `git grep -nE "BEGIN (RSA \|EC )?PRIVATE KEY\|BEGIN CERTIFICATE"` | Solo los marcadores **vacíos** de `include/secrets.example.h` y las cadenas de búsqueda de `lambda/scripts/verify_package.py` ✅ |
-| *Access keys* de AWS | `git grep -nE "AKIA[0-9A-Z]{16}"` y `aws_secret_access_key` | Sin coincidencias ✅ |
-| ARN con ID de cuenta real | `git grep -nE "arn:aws:...:[0-9]{12}:"` | Sin coincidencias (las políticas usan `REEMPLAZAR_ACCOUNT_ID`) ✅ |
-| Endpoint IoT | `git grep -n "iot.us-east-1.amazonaws.com"` | Presente en `include/config.example.h` ⚠️ No es un secreto (sin certificado no permite conectar), pero identifica la cuenta. Ver 7.5. |
-| `.vscode/extensions.json` y `.DS_Store` | `git ls-files` | Rastreados ⚠️ No contienen credenciales, pero son configuración local o del sistema operativo. Ver 7.5. |
-
-Pruebas dinámicas (⏳ pendientes, de `PRUEBAS_AWS.md`):
-
-1. Con una CA incorrecta, TLS no conecta.
-2. Con un certificado inválido, no conecta.
-3. Con JSON inválido en el `delta`, el servo no se mueve.
-4. Sin NTP, no publica.
-
-**PNF-08 · Calidad de código (RNF8)**
-
-- **Procedimiento:** ejecutar `sh test/run_host_tests.sh`, `pio run` y la suite de la Lambda. Revisar que no haya *warnings* (el script compila con `-Werror`).
-- **Indicadores:** compilación sin *warnings*, 100 % de las pruebas en PASS y número de pruebas de la Lambda = 91.
-- **Estado:** según el registro del repositorio, PASS / SUCCESS / 91 OK. ⏳ Volver a ejecutar y adjuntar las salidas (3.1).
-
-**PNF-09 · Histéresis de presencia (RNF2, RF1)**
-
-- **Objetivo:** comprobar que la presencia cambia a `Present` en 15 cm o menos y vuelve a `Absent` recién en 18 cm o más, y que dentro de la banda conserva el estado anterior.
-- **Materiales:** el mismo montaje de PNF-02 (cinta fija, superficie plana perpendicular) y el monitor serie.
-- **Procedimiento:**
-  1. **Acercamiento.** Partir de 25 cm, con `Vehiculo detectado: NO`. Acercar la superficie y detenerse en 20, 18, 17, 16, 15 y 13 cm. En cada parada, esperar 2 s y anotar la distancia y el estado que imprime el serie.
-  2. **Alejamiento.** Desde 13 cm, alejar y detenerse en 15, 16, 17, 18 y 20 cm, con el mismo registro.
-  3. En el cliente de prueba MQTT, anotar cuándo cambia `reported.vehiculo_detectado` (requiere 3 muestras iguales, sin esperar separación ordinaria).
-- **Repeticiones:** 3 ciclos completos de acercamiento y alejamiento.
-- **Registro:** tabla 5.8 y archivo del serie.
-- **Matriz de detección esperada** (lo que imprime el serie, que muestra la presencia instantánea de `UltrasonicSensor`, no la estable):
-
-| Distancia (cm) | 20 | 18 | 17 | 16 | 15 | 13 |
-|---|---|---|---|---|---|---|
-| Acercándose (estado previo NO) | NO | NO | NO | NO | **SI** | SI |
-| Alejándose (estado previo SI) | NO | **NO** | SI | SI | SI | SI |
-
-- **Indicadores:** porcentaje de paradas cuyo estado coincide con la matriz. Distancia medida en el primer `SI` del acercamiento y en el primer `NO` del alejamiento; lo ideal es 15,0 y 18,0 cm.
-- **Fuentes de error de la propia medición:**
-  - En 15 y en 18 cm la lectura cae justo en el umbral: un error de ±0,2 cm decide el estado. Por eso se anota la distancia que imprime el serie y no solo la de la cinta: el criterio se evalúa sobre la distancia medida.
-  - Mover la superficie a mano produce lecturas intermedias. Las paradas de 2 s (4 muestras) dejan estabilizar la lectura.
-  - Una superficie inclinada produce timeouts, que llevan la presencia a `DESCONOCIDO`. Si aparecen, se repite la parada.
-
-**PNF-10 · Persistencia de la cuota tras un reinicio (RNF6)**
-
-- **Objetivo:** comprobar que un reinicio el mismo día UTC no repone la cuota y que el registro en NVS se conserva.
-- **Materiales:** montaje conectado y monitor serie.
-- **Procedimiento:**
-  1. Hacerlo lejos de las 00:00 UTC, para que el día no cambie durante la prueba.
-  2. Enviar `STATUS` y anotar `diaUTC`, las 4 categorías y `solicitudesTotales` (A).
-  3. Pulsar el botón EN (reinicio) del DevKit, **sin** borrar la flash.
-  4. Esperar a que reconecte y sincronice (`AWS MQTT/TLS conectado…`) y enviar `STATUS` (B).
-- **Repeticiones:** 2.
-- **Resultado esperado:** `diaUTC` igual en A y B. Cada categoría en B mayor o igual que en A. `GET` en B = `GET` en A + 1, y la diferencia total igual al GET de reconexión más los reportes enviados desde el arranque. Ningún contador vuelve a 0.
-- **Registro:** capturas de A y B y tabla 5.5 (fila "Tras reiniciar el mismo día").
-- **Fuentes de error de la propia medición:** si pasa tiempo entre A y el reinicio, pueden entrar reportes periódicos que se confunden con el efecto del reinicio. Se reduce enviando `STATUS` justo antes de reiniciar y anotando las líneas `AWS UPDATE clase=…` del serie entre A y B.
-
-**Matriz de trazabilidad**
-
-| Req. | Diseño (sección 2) | Código (sección 3) | Prueba (sección 4) | Resultado (sección 5) |
+| ID | RNF | Procedimiento | Criterio | Evidencia |
 |---|---|---|---|---|
-| RF1 | 2.2, 2.3.1, 2.4.2 | `UltrasonicSensor::measure()` | PF-01, PNF-02, PNF-09 | 5.2, 5.8 |
-| RF2 | 2.4.2, 2.5, 2.6 | `AwsIoTManager::step()`, `report()` | PF-02, PF-03, PNF-04 | 5.1, 5.5 |
-| RF3 | 2.4.3, 2.5 | `receive()`, `applyDesired()`, `tick()`, `BarrierServo` | PF-04, PF-05, PN-13, PR-01, PR-02 | 5.6 |
-| RF4 | 2.4.2, 2.5 (frescura) | `ConsultarDistanciaHandler`, `ConsultarVehiculoHandler`, `ShadowService.get_reported` | PF-14–PF-16, PN-07, PN-08, PR-03 | 5.6 |
-| RF5 | 2.4.3 | `AbrirBarreraHandler`, `CerrarBarreraHandler`, `ShadowService.set_barrier` | PF-11, PF-12, PR-05, PNF-03 | 5.3, 5.6 |
-| RF6 | 2.4.3, 2.8 | `EstadoBarreraHandler` | PF-13 | 5.6 |
-| RF7 | 2.4.1, 2.7 | `VincularParqueoHandler`, `DynamoDBService.authorize_code` / `save_binding`, `PairingAdminService` | PF-07, PF-08, PN-02–PN-05, PN-10, PR-04 | 5.6 |
-| RF8 | 2.4.x (`alt` sin vinculación), 2.7 | `bound_device()`, `LaunchHandler`, `lambda_handler` | PF-06, PN-01, PR-06 | 5.6 |
-| RF9 | 2.4.1, 2.7 | `describe_thing()`, `CambiarVinculacionHandler`, `DesvincularParqueoHandler` | PF-09, PF-10, PN-06, PN-11, PN-12 | 5.6 |
-| RNF1 | 2.3.1 (tarea y colas) | `AwsIoTManager::begin()`, límite de demo | PNF-01 | 5.1 |
-| RNF2 | 1.2, 2.2, 2.3.1 | `UltrasonicSensor::measure()` | PNF-02, PNF-09 | 5.2, 5.7, 5.8 |
-| RNF3 | 2.4.3 | Lambda sin GET previo, `report(Control)` sin esperar 10 s | PNF-03 | 5.3 |
-| RNF4 | 2.6 | `step()` (F3) | PNF-04 | 5.1 |
-| RNF5 | 2.4.3 (rama desconectado) | `connectStep()`, `failedAttempt()`, `requestShadow()` | PNF-05 | 5.4 |
-| RNF6 | 2.6 | `ShadowBudget`, `reserve()`, `loadBudget()` | PNF-06, PNF-10 | 5.5 |
-| RNF7 | 2.7, 3.2 | `.gitignore`, plantillas, `lambda_handler`, políticas | PNF-07, PN-09, PN-14 | 4.2 (estática) |
-| RNF8 | 2.3 | Toda la base de código | PNF-08 | 5.1 |
+| PNF-01 | RNF1 | Deja el ESP32 encendido y conectado a AWS durante 10 minutos como mínimo, preferentemente 15. Durante ese período realiza consultas y movimientos de la barrera. Registra si hubo reinicios, bloqueos o desconexiones. Cuenta además los UPDATE aceptados en ese período para comprobar la frecuencia de reporte (RNF4). | Cero reinicios y cero bloqueos durante el período declarado. Como referencia de RNF4, en reposo se espera un respaldo cada 60 s. | Una captura del monitor serie |
+| PNF-02 | RNF2 | Con una regla, mide a distintas distancias, con cinco lecturas por distancia, y calcula el error absoluto. | **Criterio propuesto:** error máximo ≤ 1 cm en el rango de 5–50 cm. Es una meta por verificar experimentalmente, no un resultado. | — (la tabla de resultados de PNF-02 es la evidencia) |
+| PNF-03 | RNF3 | Graba un video con el comando de Alexa y el servo en el mismo cuadro. Mide desde que se termina de pronunciar «abrir» hasta que la barrera termina de moverse. Repite diez veces. | **Criterio propuesto:** máximo 3 s por operación. | Un solo video (enlace a Drive si pesa más de 25 MB) |
+| PNF-04 | RNF5 | Con la barrera libre, desconecta temporalmente el punto de acceso, restablece la red y verifica que el ESP32 se reconecte solo. Opcional: deja una orden `desired` pendiente y comprueba que se aplica al reconectar. Si se agotan los intentos o la cuota del firmware, documenta el resultado en vez de repetir. | Reconexión automática de Wi-Fi y MQTT sin reiniciar la placa. **Propuesta (1.4):** con un corte ≤ 30 s, el `desired` pendiente se aplica y se confirma en `reported` en ≤ 60 s después de restaurar la red. | — (se registra en la tabla de resultados de PNF-04) |
 
 **Valores del firmware que acotan los criterios** (verificados contra `include/config.example.h`):
 
@@ -2111,61 +1881,9 @@ Pruebas dinámicas (⏳ pendientes, de `PRUEBAS_AWS.md`):
 
 **PNF-01 · Estabilidad**
 
-| RNF | Valor declarado | Valor medido | ¿Cumple? | Evidencia |
-|---|---|---|---|---|
-| RNF1 Estabilidad | ≥ 10 min sin reinicio | ⏳ PENDIENTE | ⏳ | `evidencias/pruebas/pnf01-serial.txt` |
-| RNF2 Exactitud | e_max ≤ 1 cm en 5–50 cm (propuesta) | ⏳ PENDIENTE | ⏳ | tabla 5.2 |
-| RNF3 Tiempo de respuesta | t_max ≤ 3 s | ⏳ PENDIENTE | ⏳ | tabla 5.3 |
-| RNF4 Frecuencia (reposo) | ≈ 20 UPDATE en 10 min, intervalo ≤ 30 s | ⏳ PENDIENTE | ⏳ | `evidencias/aws-iot/pnf04-*.png` |
-| RNF4 Frecuencia (con cambios) | ≤ 60 UPDATE de distancia en 10 min, separación ≥ 10 s; presencia/control prioritarios | ⏳ PENDIENTE | ⏳ | ídem |
-| RNF5 Reconexión | t_conf − t_rest ≤ 30 s (propuesta) | ⏳ PENDIENTE | ⏳ | tabla 5.4 |
-| RNF6 Consumo | ≤ 1.000/día; ≈ 120–122 por demo en reposo | ⏳ PENDIENTE | ⏳ | tabla 5.5 |
-| RNF7 Seguridad (estática) | Sin secretos ni *access keys* en el repositorio | Sin secretos ni *access keys* en los archivos rastreados (4.2) | ✅ | 4.2, PNF-07 |
-| RNF7 Seguridad (dinámica) | TLS rechaza CA o certificado inválidos | ⏳ PENDIENTE | ⏳ | — |
-| RNF8 Código | 0 *warnings*, 100 % PASS, 91 pruebas de la Lambda | PASS / SUCCESS / 91 OK según el registro del repositorio; sin volver a ejecutar | ⚠️ por confirmar | 3.1 |
-
-**5.2 Exactitud por distancia (PNF-02)**
-
-Temperatura ambiente durante la prueba: ⏳ ___ °C.
-
-| d_ref (cm) | L1 | L2 | L3 | L4 | L5 | Media (cm) | Error medio ē (cm) | Error máx. (cm) | ¿≤ 1 cm? |
-|---|---|---|---|---|---|---|---|---|---|
-| 5 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 10 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 15 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 20 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 30 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 40 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 50 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| **Global** | | | | | | | ⏳ | ⏳ | ⏳ |
-
-**5.3 Tiempos de respuesta (PNF-03)**
-
-| # | Orden | t₀ fin de la frase | t₁ servo detenido | t = t₁ − t₀ (s) | `AWS comando recibido` visible en el serie (s desde t₀) | ¿≤ 3 s? |
-|---|---|---|---|---|---|---|
-| 1 | abrir | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 2 | cerrar | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 3 | abrir | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 4 | cerrar | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 5 | abrir | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 6 | cerrar | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 7 | abrir | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 8 | cerrar | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 9 | abrir | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 10 | cerrar | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| | | | **Promedio t̄** | ⏳ | | |
-| | | | **Máximo t_max** | ⏳ | | |
-| | | | **Desviación s** | ⏳ | | |
-
-Se recomienda anotar aparte la primera invocación tras varios minutos sin uso, porque puede incluir el arranque en frío de la Lambda.
-
-**5.4 Reconexión (PNF-05)**
-
-| # | Duración del corte (s) | Intentos Wi-Fi consumidos (n/10) | t_apl − t_rest (s) | t_conf − t_rest (s) | ¿Servo abierto? | ¿≤ 30 s? |
-|---|---|---|---|---|---|---|
-| 1 | 30 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 2 | 30 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
-| 3 | 30 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ |
+| Duración (min) | Reinicios | Bloqueos | Desconexiones | UPDATE aceptados | Estado |
+|---|---|---|---|---|---|
+| ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ Pendiente |
 
 **PNF-02 · Exactitud del HC-SR04**
 
@@ -2319,7 +2037,7 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 
 **Interpretación.** Pendiente de las mediciones. El criterio se evalúa con el **máximo**, no con el promedio, porque el usuario percibe la peor espera. Si el recorrido real del servo en el video difiere de 0,7 s, esa diferencia es el error de la confirmación estimada que se declara como limitación en 2.3.1.
 
-**Límites de la cuota.** Al llegar a 800 solicitudes totales, el dispositivo deja de enviar los respaldos periódicos. A los 180 s, la Lambda empieza a responder *"desactualizado"* a las consultas, aunque el sensor siga midiendo bien. Las órdenes de voz siguen funcionando con la reserva de 200. Al llegar a 1.000, el servo sigue obedeciendo los `delta` recibidos pero ya no puede confirmar en `reported`. Este comportamiento es intencional y se observa en la validación #12.
+**5.4 Reconexión (PNF-04)**
 
 Valores del firmware para interpretar los tiempos medidos (`AwsIoTManager::failedAttempt()` y `connectStep()`):
 
@@ -2398,12 +2116,12 @@ Con lo registrado hasta ahora, el sistema tiene respaldo en tres frentes: la ló
 ## 6. Conclusiones
 
 1. **Los nueve requerimientos funcionales están implementados y probados con dobles, pero no medidos.** Cada RF tiene una implementación identificable (1.3), un criterio de aceptación observable y una cobertura automática nombrada en la matriz de 4. Las 91 pruebas de la Lambda y las pruebas host del firmware ejercitan la lógica completa, incluidas la concurrencia del PIN y la cuota, sin red ni hardware. **Pendiente de demostrar:** que el mismo comportamiento se reproduce con el ESP32, AWS IoT y Alexa reales (pruebas PF, PN y PR de 4.1).
-2. **El Shadow desacopla la voz del dispositivo, y eso se ve en el código.** La Lambda solo escribe `desired` y lee `reported` ([`shadow_service.py`](../lambda/services/shadow_service.py)); el ESP32 solo conoce sus 5 temas MQTT. El diagrama de 2.4.3 y la máquina de estados de la conexión (2.3.1) muestran que una orden dada sin conexión se recupera con el único GET de la reconexión, y `test_aws.cpp` lo verifica con un GET que trae `desired` pendiente. **Pendiente de demostrar:** el tiempo real de recuperación. El código permite estimarlo en ≈ 45–49 s para un corte de 30 s (PNF-05), pero el tiempo que tarda PubSubClient en detectar la pérdida no está acotado.
-3. **La interfaz de voz asume la consistencia eventual en lugar de ocultarla.** La respuesta a una orden es *"Solicité…"*, los errores cierran la sesión sin *reprompt* y la Lambda rechaza cualquier atributo con más de 180 s, evaluado por campo con `metadata` (2.5 y 2.8). El costo es que el usuario puede oír *"desactualizado"* o el estado anterior si consulta antes de la confirmación. **Pendiente de demostrar:** con qué frecuencia ocurre en el uso real (PF-13 y PNF-03).
-4. **La política de reporte cumple el compromiso entre latencia y cuota que se diseñó.** El cálculo de 2.6 acota una demo de 60 min en reposo a 120–122 solicitudes, y el peor caso a 1.000 por día. La barrera, que es el evento crítico, se confirma sin esperar los 10 s; la presencia se publica al confirmar tres muestras (1,0–1,5 s desde el cambio físico), sin esperar los 10 s ordinarios. La histéresis de 3 cm es más de diez veces mayor que el error por temperatura en los umbrales (≤ ±0,33 cm entre 10 y 30 °C, 5.7). **Pendiente de demostrar:** los conteos reales de `STATUS` (tabla 5.5) y el comportamiento de la histéresis en el banco (tabla 5.8).
+2. **El Shadow desacopla la voz del dispositivo, y eso se ve en el código.** La Lambda solo escribe `desired` y lee `reported` ([`shadow_service.py`](../lambda/services/shadow_service.py)); el ESP32 solo conoce sus 5 temas MQTT. El diagrama de 2.4.3 y la máquina de estados de la conexión (2.3.1) muestran que una orden dada sin conexión se recupera con el único GET de la reconexión, y `test_aws.cpp` lo verifica con un GET que trae `desired` pendiente. **Pendiente de demostrar:** el tiempo real de recuperación. El código permite estimarlo en ≈ 45–49 s para un corte de 30 s (PNF-04), pero el tiempo que tarda PubSubClient en detectar la pérdida no está acotado.
+3. **La interfaz de voz asume la consistencia eventual en lugar de ocultarla.** La respuesta a una orden es *"Solicité…"*, los errores cierran la sesión sin *reprompt* y la Lambda rechaza cualquier atributo con más de 180 s, evaluado por campo con `metadata` (2.5 y 2.8). El costo es que el usuario puede oír *"desactualizado"* o el estado anterior si consulta antes de la confirmación. **Pendiente de demostrar:** con qué frecuencia ocurre en el uso real (PF-06 y PNF-03).
+4. **La política de reporte cumple el compromiso entre latencia y cuota que se diseñó.** El cálculo de 2.6 acota una demo de 30 min en reposo a 30–32 solicitudes, y el peor caso a 200 por día. La barrera, que es el evento crítico, se confirma sin esperar los 5 s; la presencia se publica entre 1,0 y 1,5 s después de estabilizarse, o al cumplirse los 5 s de separación. La histéresis de 3 cm es unas nueve veces mayor que el error por temperatura estimado en el umbral de 18 cm (≈ ±0,33 cm entre 10 y 30 °C, con v = 331,3 + 0,606·T m/s frente a los 343 m/s que usa el firmware). **Pendiente de demostrar:** el conteo de UPDATE de PNF-01 y el comportamiento de la histéresis en el banco (PF-02).
 5. **La seguridad de la vinculación es proporcional a un prototipo supervisado, y sus límites están identificados.** El análisis STRIDE (2.7) muestra que las amenazas de manipulación y elevación de privilegios tienen mitigaciones en el código: PIN ligado al destinatario, intentos atómicos, transacciones condicionales y una Lambda separada para generar el PIN. La probabilidad de acierto queda en ≈ 0,033 % por ventana. Quedan dos riesgos residuales sin mitigar: la cuenta de Alexa compartida y la ausencia de historial (repudio). **Pendiente de demostrar:** que el rol real de la Lambda no conserva políticas *FullAccess*. Según `lambda/README.md`, el rol tenía políticas *FullAccess*; ⏳ confirmar los permisos actuales en IAM y, si siguen asignadas, reemplazarlas por las políticas mínimas ya redactadas (3.2.6).
-6. **La concurrencia del firmware es simple y verificable porque cada recurso tiene un único dueño.** Las tres colas de un elemento y la regla *"solo `tick()` toca el hardware"* (3.1) eliminan los *mutex* y hacen que la cuota, la reconexión y la decisión de reporte vivan en una sola tarea, lo que permite probarlas en el PC. El precio es que la tarea de red solo ve la última muestra, y por eso el filtro de presencia reinicia su conteo tras un hueco de más de 630 ms. **Pendiente de demostrar:** la estabilidad durante 10–60 min con TLS real (PNF-01), que es donde podría aparecer una falta de memoria en la pila de 12 288 bytes.
-7. **El actuador no tiene realimentación, y esa es la limitación técnica más importante del prototipo.** La confirmación de la barrera es una estimación de 700 ms (2.3.1 y 5.7): conservadora si el servo es más rápido, y errónea si se bloquea. Ninguna prueba automática puede detectarlo. **Pendiente de demostrar:** el recorrido real t_real en el video de PNF-03. La solución está en 7.2.
+6. **La concurrencia del firmware es simple y verificable porque cada recurso tiene un único dueño.** Las tres colas de un elemento y la regla *"solo `tick()` toca el hardware"* (3.1) eliminan los *mutex* y hacen que la cuota, la reconexión y la decisión de reporte vivan en una sola tarea, lo que permite probarlas en el PC. El precio es que la tarea de red solo ve la última muestra, y por eso el filtro de presencia reinicia su conteo tras un hueco de más de 630 ms. **Pendiente de demostrar:** la estabilidad durante 10–30 min con TLS real (PNF-01), que es donde podría aparecer una falta de memoria en la pila de 12 288 bytes.
+7. **El actuador no tiene realimentación, y esa es la limitación técnica más importante del prototipo.** La confirmación de la barrera es una estimación de 700 ms (2.3.1): conservadora si el servo es más rápido, y errónea si se bloquea. Ninguna prueba automática puede detectarlo. **Pendiente de demostrar:** el recorrido real t_real en el video de PNF-03. La solución está en 7.2.
 8. **Aprendizajes del equipo.**
    - Medir y documentar el consumo de mensajes desde el diseño cambia decisiones de firmware (cuota en NVS, límite de demo).
    - Un actuador sin realimentación obliga a ser honestos en la interfaz de voz.
@@ -2426,7 +2144,7 @@ Ordenadas por prioridad: primero lo que afecta a la seguridad, después las mejo
 | 5 | 7.4 Vinculación más fuerte | PIN de 4 dígitos y `userId` compartido | Alto en producción, bajo en el banco | Alto | Lambda, DynamoDB, Alexa (Account Linking) |
 | 6 | 7.9 Pruebas de integración automatizadas | RNF3 y RNF5 se miden a mano | Medio | Medio | Nueva suite, Thing de pruebas |
 | 7 | 7.7 Publicación con QoS 1 | QoS 0 obliga a reintentar por `clientToken` | Medio | Alto | Cliente MQTT del firmware |
-| 8 | 7.6 Mayor frecuencia de eventos | Presencia sin espera ordinaria (implementado) | Bajo | Bajo | `config.h`, `step()` |
+| 8 | 7.6 Mayor frecuencia de eventos | 5 s de separación para la presencia | Bajo | Bajo | `config.h`, `step()` |
 | 9 | 7.1 Siguiente etapa del proyecto | Un solo sensor, sin pantalla ni conteo | Alto (funcionalidad) | Alto | Firmware, Shadow, Lambda y modelo de Alexa |
 | 10 | 7.10 Extensiones hacia un uso real | Una barrera por usuario, sin historial | Medio | Alto | Arquitectura completa |
 
@@ -2467,7 +2185,7 @@ Antes de cerrar, comprobar con el HC-SR04 (o un sensor dedicado bajo la barrera)
 
 **7.6 Mayor frecuencia de eventos con más cuota**
 
-Implementado en esta revisión: presencia confirmada sin espera ordinaria; distancia significativa con separación de 10 s. Ambos siguen sujetos al presupuesto ordinario de 800 y al techo total de 1.000.
+Si la cuenta lo permite, bajar `AWS_MIN_PUBLISH_INTERVAL_MS` a 1–2 s solo para cambios de presencia, manteniendo los 5 s para cambios de distancia. Así la presencia, que es el evento discreto que el usuario consulta, se publica en 1–2 s sin multiplicar los reportes de distancia. Requiere separar el intervalo por clase en `step()`, porque hoy es uno solo para `Sensor` y `Periodic`.
 
 **7.7 Publicación con QoS 1**
 
