@@ -31,11 +31,12 @@ int main() {
     assert(!barrier.open() && !barrier.positionEstimated());
     Fake::attachSuccess=false; assert(!barrier.begin());
     Fake::attachSuccess=true; assert(barrier.begin() && barrier.moving());
-    assert(Fake::angle==BARRIER_CLOSED_ANGLE && Fake::frequency==50);
+    assert(Fake::pulseUs==500 && Fake::frequency==50);
+    assert(Fake::servoPin==25 && Fake::minUs==500 && Fake::maxUs==2400);
     auto writes=Fake::writes; assert(!barrier.close() && Fake::writes==writes);
     Fake::now+=SERVO_TRAVEL_MS-1; barrier.update(); assert(barrier.moving());
     ++Fake::now; barrier.update(); assert(barrier.positionEstimated());
-    assert(barrier.open() && Fake::angle==BARRIER_OPEN_ANGLE);
+    assert(barrier.open() && Fake::pulseUs==1450);
     writes=Fake::writes; assert(!barrier.open() && Fake::writes==writes);
     assert(barrier.close() && barrier.commandedState()==BarrierServo::State::Closed);
     Fake::now=std::numeric_limits<uint32_t>::max()-100;
@@ -55,18 +56,18 @@ int main() {
     Fake::now=0; setup();
     const auto triggerCount=Fake::triggers;
     Serial.output.clear(); Serial.inject("OPEN\n"); loop();
-    assert(Fake::angle==BARRIER_OPEN_ANGLE);
+    assert(Fake::pulseUs==1450);
     assert(Fake::triggers==triggerCount); // No medicion antes del intervalo.
     Fake::now=500; Fake::echo=0; Serial.inject("CLOSE\nSTATUS\nDISTANCE\nHELP\n"); loop();
-    assert(Fake::triggers==triggerCount+1 && Fake::angle==BARRIER_CLOSED_ANGLE);
+    assert(Fake::triggers==triggerCount+1 && Fake::pulseUs==500);
     assert(Serial.output.find("timeout")!=std::string::npos);
     // Sensor detecta, pero nunca abre la barrera.
-    Fake::now=1000; Fake::echo=700; loop(); assert(Fake::angle==BARRIER_CLOSED_ANGLE);
+    Fake::now=1000; Fake::echo=700; loop(); assert(Fake::pulseUs==500);
     Serial.inject(std::string(1000,'x')+"\nOPEN\n"); Fake::now=1500;
     loop(); assert(Serial.available()>0); // Presupuesto Serial respeta la tarea periodica.
     assert(Fake::triggers==triggerCount+3);
     while(Serial.available()) loop();
-    assert(Fake::angle==BARRIER_OPEN_ANGLE);
+    assert(Fake::pulseUs==1450);
     Serial.inject("STATUS\n"); loop();
     assert(Serial.output.find("Barrera ordenada: ABIERTA")!=std::string::npos);
     std::cout << "PASS: sensor, histeresis, servo, parser e integracion del loop (simulados)\n";

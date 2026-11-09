@@ -2,7 +2,7 @@
 namespace Fake {
 inline bool attachSuccess=true;
 inline unsigned writes=0;
-inline int angle=-1, frequency=0, servoPin=-1, minUs=0, maxUs=0;
+inline int pulseUs=-1, frequency=0, servoPin=-1, minUs=0, maxUs=0;
 }
 class Servo {
     bool attached_=false;
@@ -13,5 +13,5 @@ public:
         attached_=Fake::attachSuccess;return 0;
     }
     bool attached() { return attached_; }
-    void write(int value) { Fake::angle=value; ++Fake::writes; }
+    void writeMicroseconds(int value) { Fake::pulseUs=value; ++Fake::writes; }
 };
