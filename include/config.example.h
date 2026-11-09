@@ -51,13 +51,13 @@
 #define DETECTION_HYSTERESIS_CM    3.0f
 
 // ---------- Barrera / servo SG90 ----------
-#define SERVO_PIN                 18
+#define SERVO_PIN                 25
 #define BARRIER_CLOSED_ANGLE      0
 #define BARRIER_OPEN_ANGLE        90
 #define SERVO_FREQUENCY_HZ        50
-// Inicio conservador; calibrar sin varilla antes de ampliar recorrido.
-#define SERVO_MIN_US              1000
-#define SERVO_MAX_US              2000
+// Rango verificado con el servo: 0 grados = 500 us, 90 grados = 1450 us.
+#define SERVO_MIN_US              500
+#define SERVO_MAX_US              2400
 #define SERVO_TRAVEL_MS           700UL // Estimacion, sin confirmacion fisica.
 
 // ---------- Tiempos de reconexion ----------
