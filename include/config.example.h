@@ -51,7 +51,7 @@
 #define DETECTION_HYSTERESIS_CM    3.0f
 
 // ---------- Barrera / servo SG90 ----------
-#define SERVO_PIN                 25
+#define SERVO_PIN                 18
 #define BARRIER_CLOSED_ANGLE      0
 #define BARRIER_OPEN_ANGLE        90
 #define SERVO_FREQUENCY_HZ        50
