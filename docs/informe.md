@@ -1,5 +1,7 @@
 # Práctica 3 — Integración de Objetos Inteligentes con Alexa y AWS IoT Core
 
+**SmartPark — Integración de Objetos Inteligentes con Alexa y AWS IoT Core**
+
 **Carrera:** Ingeniería de Sistemas
 
 **Docente:** Eduardo Enrique Marin Garcia
