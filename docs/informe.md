@@ -1866,19 +1866,19 @@ La lista muestra un slot en `VincularParqueoIntent` y `CambiarVinculacionIntent`
 
 ## 4. Pruebas y Validaciones
 
-**Enfoque de pruebas.** Las pruebas se agrupan en tres tipos: **funcionales** (4.1), que se ejecutan en el banco y con el simulador de Alexa; **no funcionales** (4.2), que miden estabilidad, exactitud, tiempo de respuesta y reconexión; y **automáticas** (al final de esta sección), que ejecutan las suites del firmware y de la Lambda sin hardware ni cuenta de AWS. Los resultados se anotan directamente en las tablas de cada prueba; solo se guardan capturas o video donde la tabla lo indica.
+**Enfoque de validación.** La evaluación distingue resultados observados en banco, comprobaciones automáticas y criterios de diseño. Las pruebas se agrupan en tres tipos: **funcionales** (4.1), que se ejecutan en el banco y con el simulador de Alexa; **no funcionales** (4.2), que miden estabilidad, exactitud, tiempo de respuesta y reconexión; y **automáticas** (al final de esta sección), que ejecutan las suites del firmware y de la Lambda sin hardware ni cuenta de AWS. Las tablas distinguen resultados observados de estimaciones del firmware; las evidencias disponibles se relacionan con cada caso. Una prueba automática no sustituye una verificación física del dispositivo.
 
 **Criterios de aceptación.**
 
 - Una prueba funcional se aprueba si la respuesta hablada coincide con el texto del handler y el estado del Shadow y del servo es el esperado.
 - Una prueba no funcional se aprueba si el indicador medido cumple el valor declarado en 1.4.
-- Mientras una prueba no se haya ejecutado, su resultado y su estado quedan en **⏳ Pendiente**.
+- Si faltan datos para interpretar el criterio o no existe una ejecución verificable, se registra **⚠️ No concluyente** o **⏳ Sin reejecución**, en lugar de declarar un resultado satisfactorio.
 
-Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware contra AWS, sin Alexa) se reutilizan como paso previo de PF-02 a PF-05, PNF-01 y PNF-04.
+Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware contra AWS, sin Alexa) se utilizan como preparación para PF-02 a PF-05, PNF-01 y PNF-04. Los identificadores PF y PNF se mantienen para asegurar la trazabilidad con las secciones 1.3, 1.4 y 5.
 
 ### 4.1 Pruebas funcionales
 
-**Preparación común:** firmware cargado y conectado (`STATUS` muestra `MQTT/TLS=conectado`), Lambda y skill configuradas, y simulador de Alexa en *Development*. Las frases se dicen dentro de una sesión abierta con *"Alexa, abre parqueo inteligente"*. Para las pruebas de vinculación, el administrador genera el PIN justo antes.
+**Preparación común:** firmware cargado y conectado (`STATUS` muestra `MQTT/TLS=conectado`), Lambda y skill configuradas, y simulador de Alexa en *Development*. Las frases se dicen dentro de una sesión abierta con *"Alexa, abre parqueo inteligente"*. Para las pruebas de vinculación, el administrador genera el PIN justo antes. Se verifica el resultado en tres puntos cuando corresponde: respuesta de Alexa, contenido del Device Shadow y comportamiento físico del ESP32.
 
 | ID | RF | Procedimiento | Resultado esperado | Resultado obtenido | Evidencia | Estado |
 |---|---|---|---|---|---|---|
@@ -1895,10 +1895,10 @@ Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware c
 
 | ID | RNF | Procedimiento | Criterio | Estado |
 |---|---|---|---|---|
-| PNF-01 | RNF1 | Deja el ESP32 encendido y conectado a AWS durante 10 minutos como mínimo, preferentemente 15. Durante ese período realiza consultas y movimientos de la barrera. Registra si hubo reinicios, bloqueos o desconexiones. Cuenta además los UPDATE aceptados en ese período para comprobar la frecuencia de reporte (RNF4). | Cero reinicios y cero bloqueos durante el período declarado. Como referencia de RNF4, en reposo se espera un respaldo cada 30 s. | ✅ Pasa |
-| PNF-02 | RNF2 | Con una regla, mide a distintas distancias, con cinco lecturas por distancia, y calcula el error absoluto. | **Criterio propuesto:** error máximo ≤ 1 cm en el rango de 5–50 cm. Es una meta por verificar experimentalmente, no un resultado. | ✅ Pasa |
-| PNF-03 | RNF3 | Graba un video con el comando de Alexa y el servo en el mismo cuadro. Mide desde que se termina de pronunciar «abrir» hasta que la barrera termina de moverse. Repite diez veces. | **Criterio propuesto:** máximo 3 s por operación. | ✅ Pasa |
-| PNF-04 | RNF5 | Con la barrera libre, desconecta temporalmente el punto de acceso, restablece la red y verifica que el ESP32 se reconecte solo. Opcional: deja una orden `desired` pendiente y comprueba que se aplica al reconectar. Si se agotan los intentos o la cuota del firmware, documenta el resultado en vez de repetir. | Reconexión automática de Wi-Fi y MQTT sin reiniciar la placa. Propuesta (1.4): con un corte ≤ 30 s, el desired pendiente se aplica y se confirma en reported en ≤ 60 s después de restaurar la red.| ✅ Pasa |
+| PNF-01 | RNF1 | Deja el ESP32 encendido y conectado a AWS durante 10 minutos como mínimo, preferentemente 15. Durante ese período realiza consultas y movimientos de la barrera. Registra si hubo reinicios, bloqueos o desconexiones. Cuenta además los UPDATE aceptados en ese período para comprobar la frecuencia de reporte (RNF4). | Cero reinicios y cero bloqueos durante el período declarado. Como referencia de RNF4, en reposo se espera un respaldo cada 30 s. | ❌ No cumple: 3 reinicios en 10 min |
+| PNF-02 | RNF2 | Con una regla, mide a distintas distancias, con cinco lecturas por distancia, y calcula el error absoluto. | **Criterio propuesto:** error máximo ≤ 1 cm en el rango de 5–50 cm. Es una meta por verificar experimentalmente, no un resultado. | ✅ Cumple: error máximo 1,0 cm en 35 lecturas |
+| PNF-03 | RNF3 | Graba un video con el comando de Alexa y el servo en el mismo cuadro. Mide desde que se termina de pronunciar «abrir» hasta que la barrera termina de moverse. Repite diez veces. | **Criterio propuesto:** máximo 3 s por operación. | ❌ No cumple: 4 s en una de diez mediciones |
+| PNF-04 | RNF5 | Con la barrera libre, desconecta temporalmente el punto de acceso, restablece la red y verifica que el ESP32 se reconecte solo. Opcional: deja una orden `desired` pendiente y comprueba que se aplica al reconectar. Si se agotan los intentos o la cuota del firmware, documenta el resultado en vez de repetir. | Reconexión automática de Wi-Fi y MQTT sin reiniciar la placa. Propuesta (1.4): con un corte ≤ 30 s, el desired pendiente se aplica y se confirma en reported en ≤ 60 s después de restaurar la red.| ⚠️ No concluyente: tiempos ambiguos y sin duración del corte |
 
 **Valores del firmware que acotan los criterios** (verificados contra `include/config.example.h`):
 
@@ -1908,8 +1908,6 @@ Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware c
 - Límite de demo de 60 min conectados por arranque.
 
 **Resultados de las pruebas no funcionales**
-
-Fuente: [hoja de registro de pruebas no funcionales](evidencias/pruebas/no-funcionales/registro-no-funcionales.pdf). Los estados siguientes se evalúan contra los criterios del informe; la hoja no consigna estados. Las capturas de serie y el video siguen pendientes.
 
 **PNF-01 · Estabilidad**
 
@@ -1939,7 +1937,7 @@ Error absoluto máximo global: **1,0 cm**, a 20 cm (criterio propuesto ≤ 1 cm)
 
 Criterio propuesto: máximo 3 s por operación. Estado: ❌ No cumple: 1 de 10 mediciones supera el límite.
 
-**Discrepancia del registro:** la hoja anota un máximo de 5 s, pero las diez mediciones tienen máximo de 4 s. Se usa el máximo recalculado, conservando el PDF original sin cambios. El promedio de 1,9 s sí coincide.
+**Discrepancia del registro:** la hoja indica un máximo de 5 s, aunque el máximo de sus diez mediciones es 4 s. Se usa el máximo recalculado, conservando el PDF original sin cambios. El promedio de 1,9 s sí coincide.
 
 **PNF-04 · Reconexión Wi-Fi y MQTT**
 
@@ -1951,7 +1949,7 @@ El protocolo pide medir desde que se restablece la red. La hoja expresa los tiem
 | 2 | 60 (1 min) | 180 (3 min) | Sí |
 | 3 | 240 (4 min) | 60 (1 min) | Sí |
 
-Estado: ⚠️ Recuperación y aplicación de `desired` registradas en los tres cortes; cumplimiento temporal pendiente de aclarar. No constan reinicios ni intervención manual durante estos cortes. Si MQTT se midió desde la restauración, el corte 2 supera 60 s y los cortes 1 y 3 presentan MQTT anterior a Wi-Fi; si es un tiempo adicional, los totales serían 180, 240 y 300 s. Falta confirmar además la duración de los cortes (criterio condicionado a ≤ 30 s) y la confirmación en `reported`.
+Estado: ⚠️ Recuperación y aplicación de `desired` registradas en los tres cortes; cumplimiento temporal pendiente de aclarar. La hoja no contiene información suficiente para afirmar si hubo reinicios o intervención manual en cada corte. Si MQTT se midió desde la restauración, el corte 2 supera 60 s y los cortes 1 y 3 presentan MQTT anterior a Wi-Fi; si es un tiempo adicional, los totales serían 180, 240 y 300 s. Falta confirmar además la duración de los cortes (criterio condicionado a ≤ 30 s) y la confirmación en `reported`.
 
 **Requisitos sin prueba de banco propia.** La histéresis, el consumo, la seguridad y la calidad de código (RNF4 parcial, RNF6, RNF7 y RNF8) se respaldan con las suites automáticas y el análisis ya descritos en las secciones 2 y 3; no tienen prueba de banco propia en esta práctica. La verificación estática del repositorio (8 de noviembre de 2026) no encontró certificados, claves privadas ni *access keys* de AWS en los archivos rastreados por Git, y `include/secrets.h` e `include/config.h` están ignorados por `.gitignore`.
 
@@ -1965,7 +1963,7 @@ Se ejecutan en un PC, sin el montaje y sin cuenta de AWS. Cubren la lógica del 
 | Compilación ESP32 | `pio run` sobre `espressif32@7.1.0` | `pio run` | SUCCESS (registro anterior a los últimos cambios del firmware) |
 | Lambda ([`lambda/tests/`](../lambda/tests/)) | 91 pruebas: handlers, PIN, concurrencia, sesión, aislamiento de paquetes y logs sanitizados | `.venv/bin/python -B -m unittest discover -s tests -v` | 91 OK; 74 sobre el ZIP de Alexa extraído ([`lambda/README.md`](../lambda/README.md)) |
 
-La suite del firmware se volvió a ejecutar el 8 de noviembre de 2026 con el código actual (PASS). La compilación y la suite de la Lambda conservan el resultado registrado y se vuelven a ejecutar antes de la entrega (3.1). Estado: ✅ firmware; ⏳ compilación y Lambda pendientes de nueva ejecución.
+La suite del firmware se volvió a ejecutar el 8 de noviembre de 2026 con el código actual (PASS). La compilación y la suite de la Lambda conservan el resultado registrado y se vuelven a ejecutar antes de la entrega (3.1). Estado de verificación: ✅ firmware reejecutado el 8 de noviembre; 📄 compilación y Lambda respaldadas por registros previos, sin nueva ejecución constatada para esta versión.
 
 **Casos negativos y de robustez cubiertos por las pruebas automáticas**
 
@@ -1979,6 +1977,8 @@ La suite del firmware se volvió a ejecutar el 8 de noviembre de 2026 con el có
 | Timeout del SDK tras una orden | `test_iot_update_timeout_no_retry` | `lambda/tests/test_backend.py` |
 
 **Matriz de trazabilidad**
+
+La matriz indica **cobertura** por prueba, no aprobación automática: cada resultado debe leerse en la tabla correspondiente.
 
 | Req. | Diseño (sección 2) | Código (sección 3) | Prueba (sección 4) | Resultado (secciones 4 y 5) |
 |---|---|---|---|---|
@@ -2006,13 +2006,13 @@ La suite del firmware se volvió a ejecutar el 8 de noviembre de 2026 con el có
 
 Esta sección consolida los resultados de la sección 4 y los compara con los valores declarados en 1.4 y con los parámetros del diseño (2.6). Los datos medidos se anotan una sola vez, en las tablas de 4.1 y 4.2; aquí se resumen y se interpretan. Las cifras de la columna "esperado" o "referencia" son **estimaciones calculadas** con los valores de `config.example.h` y con el código, no mediciones.
 
-**5.1 Resumen de cumplimiento**
+### 5.1 Resumen de cumplimiento
 
 | Tipo de prueba | Total | Aprobadas | Fallidas | Pendientes |
 |---|---|---|---|---|
 | Funcionales (4.1) | 8 | 8 | 0 | 0 |
-| No funcionales (4.2) | 4 | 1 (PNF-02) | 2 (PNF-01 y PNF-03) | 1 por aclarar (PNF-04) |
-| Automáticas (firmware, compilación y Lambda) | 3 | 1 reejecutada (firmware) y 2 según el registro | 0 | Nueva ejecución de la compilación y de la Lambda |
+| No funcionales (4.2) | 4 | 1 (PNF-02) | 2 (PNF-01, PNF-03) | 1 no concluyente (PNF-04) |
+| Automatizadas y compilación | 3 procesos | 1 suite reejecutada (firmware) | No se consignan fallos en los registros anteriores | 2 procesos sin reejecución actual verificada (compilación y Lambda) |
 
 *Requerimientos funcionales*
 
@@ -2026,7 +2026,7 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 | RF6 Estado del actuador | «consultar estado» responde con `reported.barrera` | PF-06 | «consultar estado» respondió con el estado reportado (PF-06) | ✅ Cumple |
 | RF7 Vinculación persistente | El usuario sigue vinculado en una sesión nueva y un código inválido se rechaza | PF-07, PF-08 | Vinculación conservada entre sesiones y código inválido rechazado (PF-07 y PF-08) | ✅ Cumple |
 | RF8 Resolución por `userId` | La skill reconoce al usuario vinculado sin pedir otro PIN; el caso sin vinculación se cubre con pruebas automáticas | PF-07 y pruebas automáticas | Usuario vinculado reconocido sin otro PIN (PF-07); el caso sin vinculación está cubierto por las pruebas automáticas según el registro | ✅ Cumple |
-| RF9 Validar, cambiar y eliminar la vinculación | `test_existing_thing_required`, `test_change_binding`, `test_unbind_one_delete_no_get` y `test_unbind_missing` | Pruebas automáticas | OK según el registro de la suite de la Lambda | ✅ Cumple |
+| RF9 Validar, cambiar y eliminar la vinculación | `test_existing_thing_required`, `test_change_binding`, `test_unbind_one_delete_no_get` y `test_unbind_missing` | Pruebas automáticas | OK según el registro de la suite de la Lambda; no existe prueba de banco específica registrada | ✅ Cobertura automática; validación integral en vivo no documentada |
 
 *Requerimientos no funcionales*
 
@@ -2035,13 +2035,13 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 | RNF1 Estabilidad | Cero reinicios y cero bloqueos durante ≥ 10 min conectado | PNF-01 (5.5) | 10 min, 3 reinicios, 0 bloqueos y 1 desconexión | ❌ No cumple |
 | RNF2 Exactitud | Error máximo ≤ 1 cm en 5–50 cm (propuesta) | PNF-02 (5.2) | Error máximo 1,0 cm a 20 cm; 35 lecturas | ✅ Cumple en el rango muestreado |
 | RNF3 Tiempo de respuesta | Máximo 3 s por operación (propuesta) | PNF-03 (5.3) | Máximo recalculado 4 s; promedio 1,9 s; 1 de 10 > 3 s | ❌ No cumple |
-| RNF4 Frecuencia de reporte | Intervalo máximo de 30 s y separación mínima de 10 s entre reportes ordinarios | PNF-01 (5.5) y pruebas automáticas | ✅ | ✅ Cumple |
-| RNF5 Reconexión | Reconexión automática; con un corte ≤ 30 s, `desired` aplicado y confirmado en ≤ 60 s (propuesta) | PNF-04 (5.4) | `desired` aplicado en 3 cortes; tiempos ambiguos | ✅ Realizado |
-| RNF6 Consumo de mensajes | ≤ 1000 solicitudes por día; ordinarias hasta 800 y 200 reservadas para control y GET | PNF-01 (5.5) y pruebas automáticas | ✅ Cumple | ✅ Cumple |
+| RNF4 Frecuencia de reporte | Respaldo cada 30 s y separación mínima de 10 s entre reportes ordinarios | PNF-01 (5.5) y pruebas automáticas | Se anotaron 10 UPDATE aceptados sin marcas temporales; el código y los tests cubren las reglas | ⚠️ Respaldado automáticamente; frecuencia real no verificada |
+| RNF5 Reconexión | Reconexión automática; con un corte ≤ 30 s, `desired` aplicado y confirmado en ≤ 60 s (propuesta) | PNF-04 (5.4) | Se anotó aplicación de `desired` en 3 cortes; no constan duración del corte ni tiempos comparables | ⚠️ Recuperación observada; cumplimiento temporal no concluyente |
+| RNF6 Consumo de mensajes | ≤ 1000 solicitudes Shadow por día; ordinarias hasta 800 y 200 reservadas para control y GET | PNF-01 (5.5) y pruebas automáticas | La lógica de límites se prueba con dobles; faltan contadores de NVS al inicio y fin de la prueba real | ⚠️ Política implementada; consumo real diario no medido |
 | RNF7 Seguridad | Sin secretos en el repositorio; MQTT sobre TLS con X.509 | Verificación estática (4.2) y pruebas automáticas | Verificación estática del 8 de noviembre de 2026 sin certificados, claves ni *access keys* en los archivos rastreados | ✅ Cumple en la parte estática; ⏳ suites pendientes de nueva ejecución |
-| RNF8 Calidad de código | Suites en PASS y compilación sin *warnings* | Pruebas automáticas (5.6) | Firmware: PASS reejecutado el 8 de noviembre de 2026. Compilación SUCCESS y Lambda 91 OK según el registro | ✅ Realizado |
+| RNF8 Calidad de código | Suites en PASS y compilación sin *warnings* | Pruebas automáticas (5.6) | Firmware PASS reejecutado el 8 de noviembre; compilación SUCCESS y Lambda 91 OK corresponden a registros anteriores | ⚠️ Cobertura parcial de la versión actual |
 
-**5.2 Exactitud del sensor (PNF-02)**
+### 5.2 Exactitud del sensor (PNF-02)
 
 | Indicador | Referencia | Origen de la referencia | Valor medido |
 |---|---|---|---|
@@ -2054,7 +2054,7 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 
 **Interpretación.** Las 35 lecturas cumplen el error máximo propuesto; el mayor error es 1,0 cm a 20 cm. No se midió a 18 cm en esta prueba. Para leerlas: un error mayor que 1 cm solo en los extremos del rango (5 o 50 cm) no altera la detección de presencia, porque los umbrales están en 15 y 18 cm; un error mayor que 1 cm cerca de esos umbrales sí reduce el margen de la histéresis y debe analizarse.
 
-**5.3 Tiempo de respuesta (PNF-03)**
+### 5.3 Tiempo de respuesta (PNF-03)
 
 | Componente | Presupuesto (1.4) | Medido |
 |---|---|---|
@@ -2071,7 +2071,7 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 
 **Interpretación.** El máximo recalculado de 4 s supera el límite de 3 s, aunque el promedio de 1,9 s queda por debajo. Falta el video para verificar los puntos de inicio y fin de las mediciones. El criterio se evalúa con el **máximo**, no con el promedio, porque el usuario percibe la peor espera. Si el recorrido real del servo en el video difiere de 0,7 s, esa diferencia es el error de la confirmación estimada que se declara como limitación en 2.3.1.
 
-**5.4 Reconexión (PNF-04)**
+### 5.4 Reconexión (PNF-04)
 
 Valores del firmware para interpretar los tiempos medidos (`AwsIoTManager::failedAttempt()` y `connectStep()`):
 
@@ -2083,35 +2083,35 @@ A cada espera se le suma un *jitter* aleatorio de 0 a 1 s. El tiempo medido desp
 
 | Indicador | Criterio | Resultado |
 |---|---|---|
-| Tiempo máximo hasta MQTT después de restaurar la red | ≤ 60 s (propuesta) | Columna MQTT: máximo 180 s; origen temporal por aclarar (4.2) |
+| Tiempo máximo hasta MQTT después de restaurar la red | ≤ 60 s (propuesta) | La columna MQTT alcanza 180 s, pero no indica si el tiempo es acumulado o adicional (4.2) |
 | `desired` pendiente aplicado al reconectar | Sí, en los cortes donde se probó | Sí, en 3 de 3 cortes; confirmación en `reported` no documentada |
-| Reinicios de la placa durante los cortes | 0 | No registrados en PNF-04 |
-| Intento alcanzado al final (serie: `intento n/10`) | ≤ 10 | ✅ Realizado |
+| Reinicios de la placa durante los cortes | 0 | No consignados; no equivale a demostrar que fueron cero |
+| Intento alcanzado al final (serie: `intento n/10`) | ≤ 10 | No consignado en la hoja |
 
 **Contador de intentos consecutivos.** Según `connectStep()`, `failedAttempt()` y `receive()`, el contador suma cada pérdida de conexión, cada intento de Wi-Fi y la conexión MQTT, y vuelve a 0 cuando llega un GET válido (`get/accepted` o `get/rejected` con 404). El límite de 10 es, por tanto, de intentos consecutivos sin sincronizar: un corte que se recupera deja el contador en 0, y la placa solo pasa a modo local si un mismo corte acumula 10 intentos seguidos. Con las esperas de la tabla, eso ocurre si la red no vuelve en unos 20 min (5 + 10 + 20 + 40 + 80 + 160 + 300 + 300 + 300 s = 1 215 s, más el *jitter*; estimación según el código).
 
-**5.5 Estabilidad, frecuencia y consumo (PNF-01)**
+### 5.5 Estabilidad, frecuencia y consumo (PNF-01)
 
 | Indicador | Esperado según el diseño | Medido |
 |---|---|---|
 | Reinicios y bloqueos | 0 | 3 reinicios y 0 bloqueos en 10 min |
 | `reconexiones` en `STATUS` | 0 | No registrado; la hoja anota 1 desconexión |
-| Intervalo máximo entre UPDATE aceptados | ≤ 30 s | ✅ Es correcto |
-| Separación mínima entre reportes ordinarios | ≥ 10 s (no se aplica a cambios de presencia ni a confirmaciones de control) | ✅ Es correcto |
+| Intervalo máximo entre UPDATE aceptados | ≤ 30 s en las condiciones declaradas | No medido: faltan marcas de tiempo |
+| Separación mínima entre reportes ordinarios | ≥ 10 s (excepto presencia y control) | No medido: faltan marcas de tiempo y categorías |
 
 Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el inicio y el final (`solicitudesTotales` y su desglose):
 
 | Categoría | Esperado en 10–15 min (2.6) | Medido |
 |---|---|---|
-| Periódicas | ≤ 20 en 10 min y ≤ 30 en 15 min (una cada 30 s; la actividad las reduce) | ✅ Pasa |
-| Sensor | Una por cambio de ≥ 10 cm o de validez, con un máximo de 60 en 10 min y 90 en 15 min por la separación de 10 s, más una por cada cambio de presencia estable, que no espera esa separación | ✅ Pasa |
-| Control | Una por cada orden de voz | ✅ Pasa |
-| GET | Una por conexión (0 si no hubo reconexión durante la prueba) | ✅ Pasa |
-| **Total** | En reposo, ≈ 20 en 10 min y ≈ 30 en 15 min; muy por debajo de las 800 ordinarias y de las 1000 diarias | ✅ Pasa |
+| Periódicas | ≈ 20 en 10 min y ≈ 30 en 15 min en reposo y sin pérdidas | No desglosado |
+| Sensor | Una por cambio de ≥ 10 cm o de validez sujeto a 10 s; presencia estable sin esa espera | No desglosado |
+| Control | Una confirmación por orden aplicada | No desglosado |
+| GET | Una solicitud de recuperación por conexión según diseño | No desglosado |
+| **Total** | Referencia en reposo: ≈ 20 en 10 min y ≈ 30 en 15 min; límites implementados de 800/1000 por día | 10 UPDATE aceptados; no permite deducir consumo diario |
 
 **Interpretación.** PNF-01 no cumple estabilidad por los 3 reinicios en 10 min. Los 10 UPDATE aceptados no bastan para calcular intervalos ni el consumo por categoría; faltan marcas de tiempo y `STATUS` inicial/final. Un intervalo mayor que 30 s indica un reporte perdido o una cuota agotada. Los reportes de distancia no pueden superar 60 en 10 min ni 90 en 15 min, así que un total cercano a 800 solo es posible con cambios de presencia continuos y significa que la cuota ordinaria cortó los envíos, como se diseñó en 2.6.
 
-**5.6 Pruebas automáticas y recursos del firmware**
+### 5.6 Pruebas automáticas y recursos del firmware
 
 | Resultado | Valor registrado | Fuente |
 |---|---|---|
@@ -2121,9 +2121,9 @@ Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el i
 | Uso de flash | 938 313 de 1 310 720 bytes (71,6 %) | 3.1 |
 | Suite de la Lambda | 91 OK; 74 sobre el ZIP de Alexa extraído | [`lambda/README.md`](../lambda/README.md) |
 
-**Interpretación.** La lógica de cuota, reconexión, vinculación y concurrencia queda respaldada por las suites: la del firmware se volvió a ejecutar con el código actual y la de la Lambda conserva su último registro. Las cifras de RAM y flash de la captura de `pio run` aportada se detallan en 3.1. Con esa captura, la compilación deja libres unos 364 KiB de flash (28,4 %) y el 85,7 % de la RAM, margen suficiente para las ampliaciones de la sección 7.
+**Interpretación.** La lógica de cuota, reconexión, vinculación y concurrencia queda respaldada por las suites: la del firmware se volvió a ejecutar con el código actual y la de la Lambda conserva su último registro. Las cifras de RAM y flash de la captura de `pio run` aportada se detallan en 3.1. Con esa captura, la compilación deja libres unos 364 KiB de flash (28,4 %) y el 85,7 % de la RAM, margen aparente para evaluar ampliaciones futuras, sujeto a una nueva compilación y a las necesidades reales de memoria de cada componente.
 
-**5.7 Evidencias**
+### 5.7 Evidencias
 
 | Evidencia | Prueba | Ruta | Estado |
 |---|---|---|---|
@@ -2133,12 +2133,12 @@ Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el i
 | Video y README de PF-07 | PF-07 | `docs/evidencias/pruebas/PF-07` | ✅ Incluido |
 | Video y README de PF-08 | PF-08 | `docs/evidencias/pruebas/PF-08` | ✅ Incluido |
 | Hoja de registro de las cuatro pruebas no funcionales | PNF-01 a PNF-04 | [PDF](evidencias/pruebas/no-funcionales/registro-no-funcionales.pdf) | ✅ Incluido; observaciones en 4.2 |
-| Video de las 10 órdenes | PNF-03 | `docs/evidencias/pnf03-video.mp4` o enlace externo | Al ser un video pesado, descartado  |
+| Video temporizado de las 10 órdenes | PNF-03 | No disponible en el material registrado | No incluido: impide auditar el inicio y fin de cada medición |
 | Salidas de las suites y de la compilación | Automáticas | `docs/evidencias/pruebas/` | Parcial: captura `pio-run.png` incluida; faltan host y Lambda |
 
-La columna de estado indica si la evidencia está en el repositorio, no si la prueba se aprobó: ese resultado está en 4.1.
+La disponibilidad de evidencia no equivale a aprobación de la prueba: los estados están en 4.1 y 4.2. Los enlaces a carpetas conservan la estructura del proyecto; para una auditoría se deben abrir y cotejar los archivos individuales.
 
-**5.8 Desviaciones y observaciones**
+### 5.8 Desviaciones y observaciones
 
 | Prueba | Observación | Causa | Acción |
 |---|---|---|---|
@@ -2146,114 +2146,101 @@ La columna de estado indica si la evidencia está en el repositorio, no si la pr
 | PF-04, PF-05, PNF-03 | Prevista por diseño: `reported.barrera` se confirma 700 ms después de la orden sin medir la posición real. | El SG90 no tiene realimentación (2.3.1). | Comparar con el recorrido real en el video de PNF-03. |
 | PNF-04 | Prevista por diseño: si un mismo corte acumula 10 intentos consecutivos sin un GET válido, el dispositivo queda en modo local hasta reiniciar. | Contador de intentos consecutivos, que vuelve a 0 tras un GET válido (5.4). | Anotar el intento `n/10` de cada corte. |
 
-**5.9 Análisis global**
+### 5.9 Análisis global
 
-Con lo registrado hasta ahora, el sistema tiene respaldo en cuatro frentes: el funcionamiento de extremo a extremo (las 8 pruebas funcionales de 4.1 aprobadas con el ESP32, AWS IoT y Alexa reales), la lógica del firmware y de la Lambda (suites automáticas), el uso de recursos de la compilación y la ausencia de secretos en el repositorio. La hoja de pruebas no funcionales aporta resultados de banco: RNF2 cumple en las 35 lecturas entre 5 y 50 cm; RNF1 no cumple por 3 reinicios en 10 min y RNF3 no cumple por una respuesta de 4 s. RNF5 queda pendiente de aclarar el origen temporal de los tiempos y la duración de los cortes. Faltan el monitor serie y el video para completar la evidencia (4.2).
+Los registros muestran que la integración esencial funciona en las condiciones ensayadas: las ocho pruebas funcionales se documentaron como aprobadas, aunque RF9 solo dispone de validación automática. Esta evidencia respalda la comunicación entre Alexa, Lambda, el Shadow y el ESP32, pero no permite concluir que todos los requisitos no funcionales se cumplan. En las cuatro pruebas PNF, **una cumple (exactitud), dos no cumplen (estabilidad y latencia máxima) y una es no concluyente (reconexión)**. La política de cuotas y la periodicidad de reporte se verifican en el código y las suites, sin registros temporizados suficientes para confirmar su desempeño real en el banco.
+
+Las principales prioridades de corrección son investigar los tres reinicios de PNF-01, repetir PNF-03 con video cronometrado e instrumentar PNF-04 con marcas de tiempo y confirmación de `reported`. Después conviene reejecutar y conservar los logs de compilación y Lambda para que la versión entregada sea reproducible. Estas limitaciones se reconocen expresamente en las conclusiones y se vinculan con las recomendaciones de la sección 7.
 
 ---
 
 ## 6. Conclusiones
 
-1. **Los nueve requerimientos funcionales están implementados y probados.** Cada RF tiene una implementación identificable (1.3), un criterio de aceptación observable y una cobertura automática nombrada en la matriz de 4. Las 91 pruebas de la Lambda y las pruebas host del firmware ejercitan la lógica completa, incluidas la concurrencia del PIN y la cuota, sin red ni hardware. Las 8 pruebas funcionales de 4.1 confirmaron ese comportamiento con el ESP32, AWS IoT y Alexa reales para RF1 a RF8; RF9 queda cubierto solo por las pruebas automáticas.
-2. **El Shadow desacopla la voz del dispositivo, y eso se ve en el código.** La Lambda solo escribe `desired` y lee `reported` ([`shadow_service.py`](../lambda/services/shadow_service.py)); el ESP32 solo conoce sus 5 temas MQTT. El diagrama de 2.4.3 y la máquina de estados de la conexión (2.3.1) muestran que una orden dada sin conexión se recupera con el único GET de la reconexión, y `test_aws.cpp` lo verifica con un GET que trae `desired` pendiente. **Pendiente de demostrar:** el tiempo real de recuperación. El código permite estimarlo en ≈ 45–49 s para un corte de 30 s (PNF-04), pero el tiempo que tarda PubSubClient en detectar la pérdida no está acotado.
-3. **La interfaz de voz asume la consistencia eventual en lugar de ocultarla.** La respuesta a una orden es *"Solicité…"*, los errores cierran la sesión sin *reprompt* y la Lambda rechaza cualquier atributo con más de 180 s, evaluado por campo con `metadata` (2.5 y 2.8). El costo es que el usuario puede oír *"desactualizado"* o el estado anterior si consulta antes de la confirmación. **Pendiente de demostrar:** con qué frecuencia ocurre en el uso real (PF-06 y PNF-03).
-4. **La política de reporte cumple el compromiso entre latencia y cuota que se diseñó.** El cálculo de 2.6 acota una demo de 60 min en reposo a 120–122 solicitudes, y el peor caso a 1000 por día, de las que como máximo 800 pueden ser ordinarias. La barrera, que es el evento crítico, se confirma sin esperar los 10 s, y la presencia se publica apenas se estabiliza, entre 1,0 y 1,5 s después del cambio físico; solo los cambios de distancia y de validez esperan la separación mínima. La histéresis de 3 cm es unas nueve veces mayor que el error por temperatura estimado en el umbral de 18 cm (≈ ±0,33 cm entre 10 y 30 °C, con v = 331,3 + 0,606·T m/s frente a los 343 m/s que usa el firmware). **Pendiente de demostrar:** el conteo de UPDATE de PNF-01 y el comportamiento de la histéresis en el banco (PF-02).
-5. **La seguridad de la vinculación es proporcional a un prototipo supervisado, y sus límites están identificados.** El análisis STRIDE (2.7) muestra que las amenazas de manipulación y elevación de privilegios tienen mitigaciones en el código: PIN ligado al destinatario, intentos atómicos, transacciones condicionales y una Lambda separada para generar el PIN. La probabilidad de acierto queda en ≈ 0,033 % por ventana. Quedan dos riesgos residuales sin mitigar: la cuenta de Alexa compartida y la ausencia de historial (repudio). **Confirmado por la captura de IAM:** el rol conserva `AWSIoTFullAccess` y `AmazonDynamoDBFullAccess`. Queda pendiente reemplazarlas por las políticas mínimas ya redactadas y validar el funcionamiento (3.2.6).
-6. **La concurrencia del firmware es simple y verificable porque cada recurso tiene un único dueño.** Las tres colas de un elemento y la regla *"solo `tick()` toca el hardware"* (3.1) eliminan los *mutex* y hacen que la cuota, la reconexión y la decisión de reporte vivan en una sola tarea, lo que permite probarlas en el PC. El precio es que la tarea de red solo ve la última muestra, y por eso el filtro de presencia reinicia su conteo tras un hueco de más de 630 ms. **Resultado de banco:** PNF-01 registró 3 reinicios en 10 min y no cumplió estabilidad. Falta investigar su causa con el monitor serie; la hoja no permite atribuirlos a memoria, alimentación ni otra causa.
-7. **El actuador no tiene realimentación, y esa es la limitación técnica más importante del prototipo.** La confirmación de la barrera es una estimación de 700 ms (2.3.1): conservadora si el servo es más rápido, y errónea si se bloquea. Ninguna prueba automática puede detectarlo. **Pendiente de demostrar:** el recorrido real t_real en el video de PNF-03. La solución está en 7.2.
-8. **Aprendizajes del equipo.**
-   - Medir y documentar el consumo de mensajes desde el diseño cambia decisiones de firmware (cuota en NVS, límite de demo).
-   - Un actuador sin realimentación obliga a ser honestos en la interfaz de voz.
-   - Las pruebas con dobles detectan errores de lógica y concurrencia baratos de corregir, pero no sustituyen al banco.
+1. **La integración de extremo a extremo está demostrada para las funciones ensayadas.** Las ocho pruebas funcionales PF-01 a PF-08 fueron registradas como aprobadas. En ellas se comprobó la lectura del HC-SR04, la actualización del Shadow, la apertura y cierre de la barrera mediante Alexa, las consultas en español y la persistencia de la vinculación. La validación de existencia del Thing, el cambio y la eliminación de vinculaciones (RF9) están cubiertos por pruebas automáticas de Lambda, pero no por una prueba presencial específica documentada; por ello, la cobertura funcional es amplia, aunque no totalmente equivalente entre requisitos.
+
+2. **El Device Shadow permitió separar la interfaz de voz del control físico.** La Lambda escribe el estado solicitado en `desired` y consulta la información de `reported`, mientras el ESP32 recibe los cambios mediante MQTT/TLS, acciona el SG90 y reporta su estado. Este desacoplamiento evita la comunicación directa entre Alexa y el microcontrolador y facilita recuperar órdenes pendientes. En PNF-04 se anotó la aplicación de `desired` en los tres cortes, pero los tiempos registrados son ambiguos y no prueban el cumplimiento del límite propuesto de 60 s.
+
+3. **La medición de distancia alcanzó la exactitud propuesta dentro de la muestra registrada.** Las 35 lecturas de PNF-02, tomadas entre 5 y 50 cm, mostraron un error absoluto máximo de 1,0 cm. El resultado cumple el criterio de RNF2 y respalda el uso del HC-SR04 en la maqueta. La prueba de histéresis PF-02 también evidenció que, dentro de la banda de 15 a 18 cm, el estado depende de la medición anterior; no corresponde interpretar esa variación como un fallo sin controlar la dirección del desplazamiento.
+
+4. **El prototipo todavía no cumple todos los objetivos de confiabilidad y rendimiento.** PNF-01 registró tres reinicios y una desconexión durante diez minutos, por lo que RNF1 no se cumple. PNF-03 registró una operación de 4 s entre diez mediciones, superior al máximo de 3 s, aunque su promedio fue 1,9 s. Estos resultados muestran que una función puede ejecutarse correctamente y, al mismo tiempo, incumplir un requisito no funcional. Las causas de los reinicios y del retraso deben investigarse con registros temporizados, sin atribuirlas a un componente sin evidencia.
+
+5. **Las pruebas automatizadas complementan el banco, pero no sustituyen su evidencia.** La suite host del firmware figura como reejecutada con resultado PASS el 8 de noviembre de 2026; la compilación de ESP32 y las 91 pruebas de Lambda cuentan con resultados registrados, pero no con una reejecución verificada para la última versión considerada. Estas pruebas aportan confianza sobre la lógica de control, reconexión, presupuesto de mensajes y vinculación, pero no acreditan por sí solas el funcionamiento del hardware, la autenticación real de AWS ni el reconocimiento por voz.
+
+6. **El modelo de reporte prioriza eventos relevantes y limita el uso de servicios de AWS.** El firmware contempla actualizaciones por cambio significativo de distancia, publicación de presencia estable, confirmaciones de control y respaldo periódico de 30 s, con límites de 800 solicitudes ordinarias y 1000 solicitudes Shadow diarias. Sin embargo, los diez UPDATE aceptados anotados en PNF-01 no permiten reconstruir intervalos ni comprobar el consumo por categorías. Por ello, se considera una política implementada y probada a nivel lógico, no una medición completa del tráfico real.
+
+7. **La barrera dispone de confirmación lógica, no de verificación física independiente.** El SG90 se considera posicionado después de 700 ms, pero el ESP32 no recibe una señal que confirme el ángulo alcanzado ni detecta obstáculos durante el cierre. Esta limitación es aceptable únicamente en el contexto de un prototipo supervisado; una aplicación real requeriría sensores de posición, detección de obstáculos y medidas de seguridad adicionales. Además, las políticas IAM amplias documentadas deberían sustituirse por permisos mínimos antes de utilizar el sistema fuera del entorno académico.
+
+8. **El aprendizaje principal fue distinguir implementación, validación y resultado medido.** SmartPark permitió integrar electrónica, MQTT/TLS, AWS IoT Core, Lambda, DynamoDB y Alexa en una misma solución. Las pruebas también mostraron que la trazabilidad y una buena documentación deben incluir tanto los casos exitosos como los fallidos, señalar evidencias ausentes y convertir las limitaciones detectadas en acciones técnicas concretas (sección 7).
 
 ---
 
+
 ## 7. Recomendaciones
 
-Ordenadas por prioridad: primero lo que afecta a la seguridad, después las mejoras técnicas y por último las extensiones.
+Las siguientes recomendaciones se desprenden de los resultados de las secciones 4 y 5 y de las limitaciones identificadas en el diseño. Se ordenan según su prioridad para una siguiente iteración del prototipo; no se presentan como funcionalidades ya implementadas.
 
-**Priorización**
+**Priorización de mejoras**
 
-| # | Recomendación | Problema que resuelve | Impacto | Esfuerzo estimado | Componentes afectados |
-|---|---|---|---|---|---|
-| 1 | 7.5 Mínimo privilegio real y limpieza del repositorio | Rol con posibles políticas *FullAccess*; endpoint y archivos locales en Git | Alto (seguridad) | Bajo | IAM, `config.example.h`, `.gitignore` |
-| 2 | 7.2 Confirmación física de la posición | `reported.barrera` es una estimación de 700 ms | Alto (veracidad del estado) | Medio | Hardware, `BarrierServo`, `report()` |
-| 3 | 7.3 Detección de obstáculos y cierre seguro | La barrera puede cerrarse sobre un vehículo | Alto (seguridad física) | Medio | `applyDesired()`, `UltrasonicSensor` o un sensor nuevo |
-| 4 | 7.8 Observabilidad y costos | No hay alarmas ni alerta de facturación | Medio | Bajo | CloudWatch, AWS Budgets |
-| 5 | 7.4 Vinculación más fuerte | PIN de 4 dígitos y `userId` compartido | Alto en producción, bajo en el banco | Alto | Lambda, DynamoDB, Alexa (Account Linking) |
-| 6 | 7.9 Pruebas de integración automatizadas | RNF3 y RNF5 se miden a mano | Medio | Medio | Nueva suite, Thing de pruebas |
-| 7 | 7.7 Publicación con QoS 1 | QoS 0 obliga a reintentar por `clientToken` | Medio | Alto | Cliente MQTT del firmware |
-| 8 | 7.6 Mayor frecuencia de eventos | 10 s de separación para los cambios de distancia | Bajo | Bajo | `config.h` |
-| 9 | 7.1 Siguiente etapa del proyecto | Un solo sensor, sin pantalla ni conteo | Alto (funcionalidad) | Alto | Firmware, Shadow, Lambda y modelo de Alexa |
-| 10 | 7.10 Extensiones hacia un uso real | Una barrera por usuario, sin historial | Medio | Alto | Arquitectura completa |
+| Prioridad | Recomendación | Fundamento | Alcance propuesto |
+|---|---|---|---|
+| Alta | 7.1 Investigar los reinicios del ESP32 | PNF-01 registró 3 reinicios en 10 minutos; RNF1 no se cumple. | Diagnóstico de alimentación, memoria y registros de arranque. |
+| Alta | 7.2 Reducir la latencia extrema | PNF-03 registró un máximo de 4 s frente al límite de 3 s. | Medición por etapas y ajuste de tiempos de respuesta. |
+| Alta | 7.3 Confirmar físicamente la posición | `reported.barrera` se calcula tras 700 ms y no verifica el recorrido. | Finales de carrera o sensores Hall. |
+| Alta | 7.4 Incorporar protección contra obstáculos | La maqueta no comprueba si hay un objeto en la trayectoria de cierre. | Sensor dedicado y lógica de bloqueo del cierre. |
+| Alta | 7.5 Revisar los permisos y archivos de configuración | El principio de mínimo privilegio debe verificarse en los roles efectivamente desplegados. | Auditoría IAM/IoT y de archivos rastreados. |
+| Media | 7.6 Mejorar la reproducibilidad de las pruebas | La reconexión y los tiempos reales requieren registros temporizados completos. | Registros, marcas de tiempo y pruebas repetibles. |
+| Media | 7.7 Reforzar la vinculación y la observabilidad | El PIN temporal es adecuado para la práctica, pero limitado para producción. | Autenticación más sólida, alarmas y control de costos. |
+| Evolutiva | 7.8 Extender las funciones del parqueo | El prototipo controla una barrera y consulta un punto de detección. | Segundo sensor, conteo y administración. |
 
-**7.1 Siguiente etapa del proyecto: segundo sensor, pantalla y conteo de espacios**
+### 7.1 Investigar los reinicios del ESP32
 
-| Elemento nuevo | Qué se reutiliza tal cual | Qué hay que cambiar |
-|---|---|---|
-| Segundo sensor (por ejemplo, un HC-SR04 a la salida) | La lógica de `measure()` (timeout, validación de 2–400 cm e histéresis) y el filtro de presencia estable de `step()` | `UltrasonicSensor` usa las macros `TRIG_PIN` y `ECHO_PIN`: hay que pasar los pines por el constructor para tener dos instancias. Además, campos nuevos en `Snapshot` y un atributo nuevo en `report()`. |
-| Pantalla | El estado ya calculado en `loop()` (distancia, presencia y barrera ordenada) | Una clase nueva, por ejemplo `DisplayPanel`, que solo lee ese estado en `loop()`. Como es una salida local, no necesita atributos en el Shadow. |
-| Conteo de espacios | El patrón de política pura de `ShadowBudget`: una clase sin E/S que se prueba en el PC | Una clase de lógica que interprete la secuencia entrada → salida de los dos sensores y mantenga el contador. |
-| Lambda | `IntentHandler`, `bound_device()`, `say()` y `ShadowService.get_reported(thing, campo)`, que ya acepta cualquier nombre de atributo | Un handler nuevo de unas 8 líneas por consulta (por ejemplo, `ConsultarEspaciosIntent`) y sus frases en el modelo de interacción. |
-| Shadow | `barrera`, `distancia_cm` y `vehiculo_detectado` mantienen su significado | Atributos nuevos en `reported`, por ejemplo `distancia_salida_cm` y `espacios_libres` (nombres propuestos). |
-| Vinculación, política IoT y temas MQTT | Sin cambios: siguen siendo los mismos 5 temas del Shadow clásico y la misma tabla | — |
+En PNF-01 se registraron **tres reinicios durante una ejecución de diez minutos**, por lo que no se alcanzó el criterio de estabilidad definido en RNF1. Antes de modificar el firmware, se recomienda registrar la causa de reinicio que informa el ESP32, la memoria disponible y las marcas de tiempo de las conexiones Wi-Fi/MQTT. También conviene revisar la alimentación del SG90 durante los movimientos y repetir el ensayo con el servo desacoplado para separar posibles causas eléctricas y de software. No es posible atribuir los reinicios a una causa concreta con la evidencia actual.
 
-Cada atributo nuevo que dispare reportes por evento aumenta el consumo: conviene agruparlos en el mismo UPDATE, como ya se hace, y revisar la estimación de 2.6.
+**Criterio de verificación propuesto:** una nueva ejecución continua de al menos 10 minutos, sin reinicios ni bloqueos, acompañada de un registro de inicio y cierre de la prueba. Después, ampliar la duración hacia el objetivo de 60 minutos declarado en RNF1.
 
-**7.2 Confirmación física de la posición**
+### 7.2 Reducir y medir la latencia de extremo a extremo
 
-Agregar un **final de carrera** o un sensor Hall en cada extremo de la barrera y publicar `reported.barrera` solo cuando el final de carrera lo confirme. Si no llega a tiempo, reportar un estado `"bloqueada"` o `"desconocida"`. Así se elimina la principal limitación declarada (2.3.1).
+En PNF-03, una de las diez operaciones registró **4 s**, superando el máximo de **3 s** establecido en RNF3, aunque el promedio registrado fue menor. Se recomienda separar la medición en etapas: solicitud de Alexa, ejecución de Lambda, escritura de `desired`, recepción de `delta`, movimiento estimado del servo y publicación de `reported`. Esta descomposición permitirá determinar dónde se produce la demora sin suponer que procede de AWS o del ESP32.
 
-**7.3 Detección de obstáculos y cierre seguro**
+**Criterio de verificación propuesto:** repetir al menos diez órdenes de apertura y cierre, conservar las marcas de tiempo y comprobar que ninguna medición supere el límite declarado. Registrar aparte los arranques en frío de Lambda si llegan a observarse.
 
-Antes de cerrar, comprobar con el HC-SR04 (o un sensor dedicado bajo la barrera) que no haya un vehículo en la trayectoria. Si lo hay, no cerrar y reportarlo. No se recomienda agregar un cierre automático por tiempo: contradice la restricción de diseño de control solo por voz (1.1). Si en el futuro se cambia esa restricción, el cierre automático debe pasar por la misma comprobación de obstáculos.
+### 7.3 Confirmación física de la posición de la barrera
 
-**7.4 Vinculación más fuerte**
+Actualmente, `reported.barrera` se actualiza después de un tiempo estimado de recorrido de **700 ms**. Para que el estado represente una posición comprobada, se propone instalar finales de carrera o sensores Hall en los extremos de apertura y cierre. El firmware debería publicar `abierta` o `cerrada` únicamente cuando se detecte el extremo correspondiente y utilizar un estado como `desconocida` o `bloqueada` si no se confirma el movimiento dentro del tiempo límite. Este cambio requiere actualizar también las validaciones de la Lambda y la documentación del Shadow.
 
-- Para producción: **Account Linking** (OAuth 2.0) con un proveedor de identidad, para que la vinculación quede ligada a una cuenta del parqueo y no al `userId` de Alexa.
-- Alternativa intermedia: PIN de 6 a 8 dígitos o alfanumérico, o un código mostrado en la pantalla propuesta en 7.1 (prueba de posesión física).
-- Registrar en CloudWatch, sin datos personales, los intentos fallidos por ventana para detectar abusos.
+### 7.4 Detección de obstáculos y cierre seguro
 
-**7.5 Mínimo privilegio real y limpieza del repositorio**
+La maqueta actual no detecta objetos situados bajo la barrera. Para una versión de mayor escala se recomienda incorporar un sensor dedicado a la trayectoria de cierre, independiente del HC-SR04 que detecta vehículos esperando. Ante una obstrucción, el dispositivo debería impedir el cierre, registrar el motivo y comunicarlo a través del Shadow. La incorporación de un cierre automático no forma parte de esta práctica y no debe confundirse con el control exclusivamente por voz definido en la sección 1.
 
-1. **Retirar las políticas *FullAccess*** del rol de `SmartParkAlexaBackend` y asociar `alexa-execution-policy.example.json` con el ARN real, después de probar cada intent. Recordar que agregar una política reducida no anula una amplia.
-2. Para varios Things, usar un patrón de recurso (`thing/smartpark-*`) o una lista explícita en lugar de un solo Thing.
-3. Si se configura `IOT_DATA_ENDPOINT`, quitar `iot:DescribeEndpoint` con `Resource: "*"`.
-4. **Sacar el endpoint IoT real de `include/config.example.h`** (reemplazarlo por `REEMPLAZAR-ats.iot.us-east-1.amazonaws.com`). No es un secreto, pero identifica la cuenta.
-5. Dejar de rastrear `.DS_Store`, `lambda/.DS_Store` y `.vscode/extensions.json` (`git rm --cached`) y agregar `.DS_Store` al `.gitignore`.
+### 7.5 Seguridad y principio de mínimo privilegio
 
-**7.6 Mayor frecuencia de eventos con más cuota**
+Se recomienda comprobar las políticas **efectivamente asignadas** al rol de `SmartParkAlexaBackend`, a la Lambda administrativa y al certificado del Thing. Si siguen existiendo permisos `FullAccess`, deben sustituirse por operaciones limitadas a los recursos y acciones indispensables, probando después la vinculación, las consultas y los comandos. Agregar una política limitada no anula los permisos concedidos por otra política más amplia.
 
-La presencia ya se publica sin esperar la separación mínima (2.6). Si la cuenta lo permite, bajar `AWS_MIN_PUBLISH_INTERVAL_MS` (hoy 10 s) haría que los cambios de distancia también se publiquen antes. Cada reducción aumenta el máximo de reportes de distancia en una demo (⌊3 600 s / T_min⌋), así que antes de cambiarlo hay que revisar la estimación de 2.6 y el techo de 800 ordinarias.
+También conviene revisar el seguimiento de archivos locales (`.DS_Store`, `.idea/`, configuraciones del IDE) y mantener las credenciales, certificados y claves privadas fuera de Git. Un endpoint AWS no es por sí mismo una contraseña, pero debe documentarse si corresponde publicarlo en una plantilla. Estas recomendaciones no implican que todas las configuraciones mencionadas sigan presentes en el despliegue actual.
 
-**7.7 Publicación con QoS 1**
+### 7.6 Pruebas repetibles y sincronización tras reconexión
 
-PubSubClient solo publica con QoS 0. Migrar a un cliente que publique con QoS 1 (por ejemplo, `esp-mqtt` de ESP-IDF, disponible desde Arduino-ESP32, o el AWS IoT Device SDK para Embedded C) daría acuse de entrega a nivel MQTT y simplificaría la lógica de reintentos por `clientToken`.
+Las futuras pruebas de PNF-04 deberían incluir la hora exacta de desconexión y recuperación de red, el valor de `desired` enviado mientras el ESP32 está desconectado, el instante del GET de recuperación y la confirmación posterior en `reported`. Esto permitiría evaluar de manera concluyente el límite temporal de RNF5. Es recomendable automatizar, cuando sea viable, una prueba con un Thing de ensayo o un cliente MQTT simulado, sin confundirla con la verificación física del servo.
 
-**7.8 Observabilidad y costos**
+En paralelo, la frecuencia de publicación por evento y el respaldo de 30 s deben verificarse con mensajes MQTT con marca de tiempo; contar UPDATE aceptados no basta para establecer sus intervalos reales. Cualquier disminución de `AWS_MIN_PUBLISH_INTERVAL_MS` debe evaluarse junto con el presupuesto diario de solicitudes del Shadow.
 
-- Alarmas de CloudWatch sobre los errores y la duración de ambas Lambdas.
-- Métrica de *throttling* de DynamoDB.
-- **Alerta de facturación** en AWS Budgets (3.2.7).
-- Revisar la retención de los logs para no acumular costos.
+### 7.7 Vinculación, observabilidad y costos
 
-**7.9 Pruebas de integración automatizadas**
+Para una implementación más allá del laboratorio, se recomienda evolucionar del PIN de cuatro dígitos hacia una comprobación de posesión más fuerte o hacia **Account Linking** con OAuth 2.0, manteniendo controles de intentos y caducidad. Además, sería útil habilitar alarmas de CloudWatch para errores y duración de Lambda, vigilar el *throttling* de DynamoDB, establecer una alerta en AWS Budgets y definir la retención de los registros. Esto facilitaría detectar fallos reales sin aumentar innecesariamente el costo de operación.
 
-Agregar una suite que, con credenciales de prueba y un Thing de pruebas, ejecute `UpdateThingShadow` y verifique en el Shadow que el ESP32 (o un simulador MQTT del dispositivo) confirma en `reported` dentro de un tiempo límite. Así RNF3 y RNF5 se medirían de forma repetible y no a mano.
+### 7.8 Extensiones hacia un parqueo real
 
-**7.10 Extensiones hacia un uso real**
+Una siguiente etapa podría agregar un sensor en la salida y un contador de plazas disponibles, reutilizando la arquitectura modular del firmware y publicando nuevos atributos en `reported`. También podrían incorporarse una pantalla local, un panel administrativo para administrar vinculaciones, historial de movimientos y soporte para varias barreras por usuario. Cada extensión debe acompañarse de nuevos intents, pruebas de integración y una revisión del presupuesto de mensajes de AWS IoT Core.
 
-- **Múltiples barreras** por usuario o por parqueo: un Thing por barrera y una vinculación con lista de Things, más un slot `barrera` ("abre la barrera norte") validado contra esa lista.
-- **Historial de accesos**: una regla de AWS IoT que copie los cambios de `reported.barrera` a una tabla DynamoDB o a S3, para consultar quién abrió y cuándo.
-- **Notificaciones**: una regla de IoT con SNS o notificaciones proactivas de Alexa cuando se detecte un vehículo esperando.
-- **Aplicación web** de administración para generar PIN, ver vinculaciones y revocar accesos, en lugar de invocar la Lambda desde la consola.
-- **Alimentación y montaje robustos**: un servo de mayor torque con fuente dimensionada y un gabinete para el ESP32 si se lleva a una barrera física.
+Para una barrera real se necesitarían, adicionalmente, elementos mecánicos y eléctricos adecuados, confirmación de posición y medidas de seguridad independientes; el prototipo de banco no debe considerarse un dispositivo de seguridad listo para producción.
 
 ---
 
 ## 8. Anexos
 
-**8.1 Glosario**
+Los anexos complementan el informe con definiciones, fuentes técnicas y rutas de las evidencias funcionales disponibles. Las rutas se expresan **desde `docs/informe.md`** para que funcionen como enlaces relativos al visualizar el repositorio en GitHub. Se omite deliberadamente un catálogo de evidencias de las pruebas no funcionales de la sección 4.2; sus resultados y limitaciones permanecen documentados en el cuerpo del informe.
+
+### 8.1 Glosario
 
 | Término | Definición |
 |---|---|
@@ -2277,7 +2264,7 @@ Agregar una suite que, con credenciales de prueba y un Thing de pruebas, ejecute
 | `dynamodb:LeadingKeys` | Clave de condición de IAM que restringe una acción de DynamoDB a los elementos cuya clave de partición cumple un patrón (por ejemplo, `PAIRUSER#*`). |
 | STRIDE | Clasificación de amenazas: suplantación, manipulación, repudio, divulgación de información, denegación de servicio y elevación de privilegios. |
 
-**8.2 Referencias**
+### 8.2 Referencias
 
 Enlaces comprobados el 8 de noviembre de 2026.
 
@@ -2299,4 +2286,39 @@ Enlaces comprobados el 8 de noviembre de 2026.
 - ESP32Servo — [repositorio](https://github.com/madhephaestus/ESP32Servo)
 - ESP-IDF — [FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos.html) y [Non-Volatile Storage](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html)
 - Arduino-ESP32 — [Preferences](https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/preferences.html)
+
+
+### 8.3 Evidencias de las pruebas funcionales (sección 4.1)
+
+Las siguientes rutas corresponden a las carpetas de evidencias citadas en la sección 4.1. Los videos, fotografías y hojas de registro se utilizan como respaldo de los resultados reportados; no sustituyen la lectura de los criterios de aceptación.
+
+| Prueba | Evidencia referenciada | Ruta relativa desde `docs/informe.md` |
+|---|---|---|
+| PF-01 — Medición de distancia | Fotografías, hoja de mediciones y descripción de ejecución. | [`evidencias/pruebas/PF-01/`](evidencias/pruebas/PF-01/) |
+| PF-02 — Presencia e histéresis | Video, hoja de observaciones y descripción de ejecución. | [`evidencias/pruebas/PF-02/`](evidencias/pruebas/PF-02/) |
+| PF-03 — Actualización de Shadow | Video de cambio de distancia y presencia, junto con registro de pruebas. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-04 — Apertura por Alexa | Videos de órdenes y comprobación de la barrera; registro compartido. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-05 — Cierre por Alexa | Videos de cierre y actualización de estado; registro compartido. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-06 — Consultas por voz | Registro compartido de respuestas de Alexa. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-07 — Persistencia de vinculación | Video de cierre y reapertura de la skill. | [`evidencias/pruebas/PF-07/`](evidencias/pruebas/PF-07/) |
+| PF-08 — Rechazo de PIN inválido | Video del rechazo y observación de la vinculación. | [`evidencias/pruebas/PF-08/`](evidencias/pruebas/PF-08/) |
+
+### 8.4 Evidencias de arquitectura y configuración
+
+Las evidencias visuales correspondientes a la arquitectura y configuración de SmartPark se encuentran incorporadas en las secciones 2 y 3 del presente informe.
+
+Estas capturas permiten identificar los componentes utilizados y respaldan la documentación de las configuraciones realizadas en AWS IoT Core, AWS Lambda, DynamoDB y Alexa.
+
+Para evitar duplicar las imágenes, se presenta una relación de los recursos y su ubicación dentro del documento.
+
+| Recurso | Ubicación dentro del informe |
+|---|---|
+| Diagrama de arquitectura | [Sección 2.1 — Diagrama de arquitectura](#21-diagrama-de-arquitectura) |
+| Diagrama de conexiones | [Sección 2.2 — Diagrama de circuito](#22-diagrama-de-circuito) |
+| Thing y Device Shadow | [Sección 3.2 — Configuraciones en AWS](#32-configuraciones-en-aws) |
+| Certificado y política AWS IoT | [Sección 3.2 — Configuraciones en AWS](#32-configuraciones-en-aws) |
+| Funciones Lambda y permisos IAM | [Sección 3.2 — Configuraciones en AWS](#32-configuraciones-en-aws) |
+| Modelo de interacción y simulador de Alexa | [Sección 3.3 — Configuraciones en Alexa](#33-configuraciones-en-alexa) |
+
+**Alcance de las evidencias.** Las capturas de configuración se encuentran referenciadas dentro del desarrollo e implementación del proyecto. Las evidencias de las pruebas funcionales se organizan en la sección 8.3.
 
