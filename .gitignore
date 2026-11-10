@@ -20,3 +20,6 @@
 /lambda/**/__pycache__/
 /lambda/**/*.pyc
 /lambda/.coverage
+
+# JetBrains IDE settings
+.idea/
