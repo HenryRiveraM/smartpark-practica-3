@@ -1,5 +1,7 @@
 # Práctica 3 — Integración de Objetos Inteligentes con Alexa y AWS IoT Core
- 
+
+**SmartPark — Integración de Objetos Inteligentes con Alexa y AWS IoT Core**
+
 **Asignatura:** Internet de las Cosas [SIS-234]
  
 **Semestre:** 2-2026
