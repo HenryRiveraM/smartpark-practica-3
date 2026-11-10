@@ -2177,90 +2177,70 @@ Las principales prioridades de corrección son investigar los tres reinicios de 
 
 ## 7. Recomendaciones
 
-Ordenadas por prioridad: primero lo que afecta a la seguridad, después las mejoras técnicas y por último las extensiones.
+Las siguientes recomendaciones se desprenden de los resultados de las secciones 4 y 5 y de las limitaciones identificadas en el diseño. Se ordenan según su prioridad para una siguiente iteración del prototipo; no se presentan como funcionalidades ya implementadas.
 
-**Priorización**
+**Priorización de mejoras**
 
-| # | Recomendación | Problema que resuelve | Impacto | Esfuerzo estimado | Componentes afectados |
-|---|---|---|---|---|---|
-| 1 | 7.5 Mínimo privilegio real y limpieza del repositorio | Rol con posibles políticas *FullAccess*; endpoint y archivos locales en Git | Alto (seguridad) | Bajo | IAM, `config.example.h`, `.gitignore` |
-| 2 | 7.2 Confirmación física de la posición | `reported.barrera` es una estimación de 700 ms | Alto (veracidad del estado) | Medio | Hardware, `BarrierServo`, `report()` |
-| 3 | 7.3 Detección de obstáculos y cierre seguro | La barrera puede cerrarse sobre un vehículo | Alto (seguridad física) | Medio | `applyDesired()`, `UltrasonicSensor` o un sensor nuevo |
-| 4 | 7.8 Observabilidad y costos | No hay alarmas ni alerta de facturación | Medio | Bajo | CloudWatch, AWS Budgets |
-| 5 | 7.4 Vinculación más fuerte | PIN de 4 dígitos y `userId` compartido | Alto en producción, bajo en el banco | Alto | Lambda, DynamoDB, Alexa (Account Linking) |
-| 6 | 7.9 Pruebas de integración automatizadas | RNF3 y RNF5 se miden a mano | Medio | Medio | Nueva suite, Thing de pruebas |
-| 7 | 7.7 Publicación con QoS 1 | QoS 0 obliga a reintentar por `clientToken` | Medio | Alto | Cliente MQTT del firmware |
-| 8 | 7.6 Mayor frecuencia de eventos | 10 s de separación para los cambios de distancia | Bajo | Bajo | `config.h` |
-| 9 | 7.1 Siguiente etapa del proyecto | Un solo sensor, sin pantalla ni conteo | Alto (funcionalidad) | Alto | Firmware, Shadow, Lambda y modelo de Alexa |
-| 10 | 7.10 Extensiones hacia un uso real | Una barrera por usuario, sin historial | Medio | Alto | Arquitectura completa |
+| Prioridad | Recomendación | Fundamento | Alcance propuesto |
+|---|---|---|---|
+| Alta | 7.1 Investigar los reinicios del ESP32 | PNF-01 registró 3 reinicios en 10 minutos; RNF1 no se cumple. | Diagnóstico de alimentación, memoria y registros de arranque. |
+| Alta | 7.2 Reducir la latencia extrema | PNF-03 registró un máximo de 4 s frente al límite de 3 s. | Medición por etapas y ajuste de tiempos de respuesta. |
+| Alta | 7.3 Confirmar físicamente la posición | `reported.barrera` se calcula tras 700 ms y no verifica el recorrido. | Finales de carrera o sensores Hall. |
+| Alta | 7.4 Incorporar protección contra obstáculos | La maqueta no comprueba si hay un objeto en la trayectoria de cierre. | Sensor dedicado y lógica de bloqueo del cierre. |
+| Alta | 7.5 Revisar los permisos y archivos de configuración | El principio de mínimo privilegio debe verificarse en los roles efectivamente desplegados. | Auditoría IAM/IoT y de archivos rastreados. |
+| Media | 7.6 Mejorar la reproducibilidad de las pruebas | La reconexión y los tiempos reales requieren registros temporizados completos. | Registros, marcas de tiempo y pruebas repetibles. |
+| Media | 7.7 Reforzar la vinculación y la observabilidad | El PIN temporal es adecuado para la práctica, pero limitado para producción. | Autenticación más sólida, alarmas y control de costos. |
+| Evolutiva | 7.8 Extender las funciones del parqueo | El prototipo controla una barrera y consulta un punto de detección. | Segundo sensor, conteo y administración. |
 
-**7.1 Siguiente etapa del proyecto: segundo sensor, pantalla y conteo de espacios**
+### 7.1 Investigar los reinicios del ESP32
 
-| Elemento nuevo | Qué se reutiliza tal cual | Qué hay que cambiar |
-|---|---|---|
-| Segundo sensor (por ejemplo, un HC-SR04 a la salida) | La lógica de `measure()` (timeout, validación de 2–400 cm e histéresis) y el filtro de presencia estable de `step()` | `UltrasonicSensor` usa las macros `TRIG_PIN` y `ECHO_PIN`: hay que pasar los pines por el constructor para tener dos instancias. Además, campos nuevos en `Snapshot` y un atributo nuevo en `report()`. |
-| Pantalla | El estado ya calculado en `loop()` (distancia, presencia y barrera ordenada) | Una clase nueva, por ejemplo `DisplayPanel`, que solo lee ese estado en `loop()`. Como es una salida local, no necesita atributos en el Shadow. |
-| Conteo de espacios | El patrón de política pura de `ShadowBudget`: una clase sin E/S que se prueba en el PC | Una clase de lógica que interprete la secuencia entrada → salida de los dos sensores y mantenga el contador. |
-| Lambda | `IntentHandler`, `bound_device()`, `say()` y `ShadowService.get_reported(thing, campo)`, que ya acepta cualquier nombre de atributo | Un handler nuevo de unas 8 líneas por consulta (por ejemplo, `ConsultarEspaciosIntent`) y sus frases en el modelo de interacción. |
-| Shadow | `barrera`, `distancia_cm` y `vehiculo_detectado` mantienen su significado | Atributos nuevos en `reported`, por ejemplo `distancia_salida_cm` y `espacios_libres` (nombres propuestos). |
-| Vinculación, política IoT y temas MQTT | Sin cambios: siguen siendo los mismos 5 temas del Shadow clásico y la misma tabla | — |
+En PNF-01 se registraron **tres reinicios durante una ejecución de diez minutos**, por lo que no se alcanzó el criterio de estabilidad definido en RNF1. Antes de modificar el firmware, se recomienda registrar la causa de reinicio que informa el ESP32, la memoria disponible y las marcas de tiempo de las conexiones Wi-Fi/MQTT. También conviene revisar la alimentación del SG90 durante los movimientos y repetir el ensayo con el servo desacoplado para separar posibles causas eléctricas y de software. No es posible atribuir los reinicios a una causa concreta con la evidencia actual.
 
-Cada atributo nuevo que dispare reportes por evento aumenta el consumo: conviene agruparlos en el mismo UPDATE, como ya se hace, y revisar la estimación de 2.6.
+**Criterio de verificación propuesto:** una nueva ejecución continua de al menos 10 minutos, sin reinicios ni bloqueos, acompañada de un registro de inicio y cierre de la prueba. Después, ampliar la duración hacia el objetivo de 60 minutos declarado en RNF1.
 
-**7.2 Confirmación física de la posición**
+### 7.2 Reducir y medir la latencia de extremo a extremo
 
-Agregar un **final de carrera** o un sensor Hall en cada extremo de la barrera y publicar `reported.barrera` solo cuando el final de carrera lo confirme. Si no llega a tiempo, reportar un estado `"bloqueada"` o `"desconocida"`. Así se elimina la principal limitación declarada (2.3.1).
+En PNF-03, una de las diez operaciones registró **4 s**, superando el máximo de **3 s** establecido en RNF3, aunque el promedio registrado fue menor. Se recomienda separar la medición en etapas: solicitud de Alexa, ejecución de Lambda, escritura de `desired`, recepción de `delta`, movimiento estimado del servo y publicación de `reported`. Esta descomposición permitirá determinar dónde se produce la demora sin suponer que procede de AWS o del ESP32.
 
-**7.3 Detección de obstáculos y cierre seguro**
+**Criterio de verificación propuesto:** repetir al menos diez órdenes de apertura y cierre, conservar las marcas de tiempo y comprobar que ninguna medición supere el límite declarado. Registrar aparte los arranques en frío de Lambda si llegan a observarse.
 
-Antes de cerrar, comprobar con el HC-SR04 (o un sensor dedicado bajo la barrera) que no haya un vehículo en la trayectoria. Si lo hay, no cerrar y reportarlo. No se recomienda agregar un cierre automático por tiempo: contradice la restricción de diseño de control solo por voz (1.1). Si en el futuro se cambia esa restricción, el cierre automático debe pasar por la misma comprobación de obstáculos.
+### 7.3 Confirmación física de la posición de la barrera
 
-**7.4 Vinculación más fuerte**
+Actualmente, `reported.barrera` se actualiza después de un tiempo estimado de recorrido de **700 ms**. Para que el estado represente una posición comprobada, se propone instalar finales de carrera o sensores Hall en los extremos de apertura y cierre. El firmware debería publicar `abierta` o `cerrada` únicamente cuando se detecte el extremo correspondiente y utilizar un estado como `desconocida` o `bloqueada` si no se confirma el movimiento dentro del tiempo límite. Este cambio requiere actualizar también las validaciones de la Lambda y la documentación del Shadow.
 
-- Para producción: **Account Linking** (OAuth 2.0) con un proveedor de identidad, para que la vinculación quede ligada a una cuenta del parqueo y no al `userId` de Alexa.
-- Alternativa intermedia: PIN de 6 a 8 dígitos o alfanumérico, o un código mostrado en la pantalla propuesta en 7.1 (prueba de posesión física).
-- Registrar en CloudWatch, sin datos personales, los intentos fallidos por ventana para detectar abusos.
+### 7.4 Detección de obstáculos y cierre seguro
 
-**7.5 Mínimo privilegio real y limpieza del repositorio**
+La maqueta actual no detecta objetos situados bajo la barrera. Para una versión de mayor escala se recomienda incorporar un sensor dedicado a la trayectoria de cierre, independiente del HC-SR04 que detecta vehículos esperando. Ante una obstrucción, el dispositivo debería impedir el cierre, registrar el motivo y comunicarlo a través del Shadow. La incorporación de un cierre automático no forma parte de esta práctica y no debe confundirse con el control exclusivamente por voz definido en la sección 1.
 
-1. **Retirar las políticas *FullAccess*** del rol de `SmartParkAlexaBackend` y asociar `alexa-execution-policy.example.json` con el ARN real, después de probar cada intent. Recordar que agregar una política reducida no anula una amplia.
-2. Para varios Things, usar un patrón de recurso (`thing/smartpark-*`) o una lista explícita en lugar de un solo Thing.
-3. Si se configura `IOT_DATA_ENDPOINT`, quitar `iot:DescribeEndpoint` con `Resource: "*"`.
-4. **Sacar el endpoint IoT real de `include/config.example.h`** (reemplazarlo por `REEMPLAZAR-ats.iot.us-east-1.amazonaws.com`). No es un secreto, pero identifica la cuenta.
-5. Dejar de rastrear `.DS_Store`, `lambda/.DS_Store` y `.vscode/extensions.json` (`git rm --cached`) y agregar `.DS_Store` al `.gitignore`.
+### 7.5 Seguridad y principio de mínimo privilegio
 
-**7.6 Mayor frecuencia de eventos con más cuota**
+Se recomienda comprobar las políticas **efectivamente asignadas** al rol de `SmartParkAlexaBackend`, a la Lambda administrativa y al certificado del Thing. Si siguen existiendo permisos `FullAccess`, deben sustituirse por operaciones limitadas a los recursos y acciones indispensables, probando después la vinculación, las consultas y los comandos. Agregar una política limitada no anula los permisos concedidos por otra política más amplia.
 
-La presencia ya se publica sin esperar la separación mínima (2.6). Si la cuenta lo permite, bajar `AWS_MIN_PUBLISH_INTERVAL_MS` (hoy 10 s) haría que los cambios de distancia también se publiquen antes. Cada reducción aumenta el máximo de reportes de distancia en una demo (⌊3 600 s / T_min⌋), así que antes de cambiarlo hay que revisar la estimación de 2.6 y el techo de 800 ordinarias.
+También conviene revisar el seguimiento de archivos locales (`.DS_Store`, `.idea/`, configuraciones del IDE) y mantener las credenciales, certificados y claves privadas fuera de Git. Un endpoint AWS no es por sí mismo una contraseña, pero debe documentarse si corresponde publicarlo en una plantilla. Estas recomendaciones no implican que todas las configuraciones mencionadas sigan presentes en el despliegue actual.
 
-**7.7 Publicación con QoS 1**
+### 7.6 Pruebas repetibles y sincronización tras reconexión
 
-PubSubClient solo publica con QoS 0. Migrar a un cliente que publique con QoS 1 (por ejemplo, `esp-mqtt` de ESP-IDF, disponible desde Arduino-ESP32, o el AWS IoT Device SDK para Embedded C) daría acuse de entrega a nivel MQTT y simplificaría la lógica de reintentos por `clientToken`.
+Las futuras pruebas de PNF-04 deberían incluir la hora exacta de desconexión y recuperación de red, el valor de `desired` enviado mientras el ESP32 está desconectado, el instante del GET de recuperación y la confirmación posterior en `reported`. Esto permitiría evaluar de manera concluyente el límite temporal de RNF5. Es recomendable automatizar, cuando sea viable, una prueba con un Thing de ensayo o un cliente MQTT simulado, sin confundirla con la verificación física del servo.
 
-**7.8 Observabilidad y costos**
+En paralelo, la frecuencia de publicación por evento y el respaldo de 30 s deben verificarse con mensajes MQTT con marca de tiempo; contar UPDATE aceptados no basta para establecer sus intervalos reales. Cualquier disminución de `AWS_MIN_PUBLISH_INTERVAL_MS` debe evaluarse junto con el presupuesto diario de solicitudes del Shadow.
 
-- Alarmas de CloudWatch sobre los errores y la duración de ambas Lambdas.
-- Métrica de *throttling* de DynamoDB.
-- **Alerta de facturación** en AWS Budgets (3.2.7).
-- Revisar la retención de los logs para no acumular costos.
+### 7.7 Vinculación, observabilidad y costos
 
-**7.9 Pruebas de integración automatizadas**
+Para una implementación más allá del laboratorio, se recomienda evolucionar del PIN de cuatro dígitos hacia una comprobación de posesión más fuerte o hacia **Account Linking** con OAuth 2.0, manteniendo controles de intentos y caducidad. Además, sería útil habilitar alarmas de CloudWatch para errores y duración de Lambda, vigilar el *throttling* de DynamoDB, establecer una alerta en AWS Budgets y definir la retención de los registros. Esto facilitaría detectar fallos reales sin aumentar innecesariamente el costo de operación.
 
-Agregar una suite que, con credenciales de prueba y un Thing de pruebas, ejecute `UpdateThingShadow` y verifique en el Shadow que el ESP32 (o un simulador MQTT del dispositivo) confirma en `reported` dentro de un tiempo límite. Así RNF3 y RNF5 se medirían de forma repetible y no a mano.
+### 7.8 Extensiones hacia un parqueo real
 
-**7.10 Extensiones hacia un uso real**
+Una siguiente etapa podría agregar un sensor en la salida y un contador de plazas disponibles, reutilizando la arquitectura modular del firmware y publicando nuevos atributos en `reported`. También podrían incorporarse una pantalla local, un panel administrativo para administrar vinculaciones, historial de movimientos y soporte para varias barreras por usuario. Cada extensión debe acompañarse de nuevos intents, pruebas de integración y una revisión del presupuesto de mensajes de AWS IoT Core.
 
-- **Múltiples barreras** por usuario o por parqueo: un Thing por barrera y una vinculación con lista de Things, más un slot `barrera` ("abre la barrera norte") validado contra esa lista.
-- **Historial de accesos**: una regla de AWS IoT que copie los cambios de `reported.barrera` a una tabla DynamoDB o a S3, para consultar quién abrió y cuándo.
-- **Notificaciones**: una regla de IoT con SNS o notificaciones proactivas de Alexa cuando se detecte un vehículo esperando.
-- **Aplicación web** de administración para generar PIN, ver vinculaciones y revocar accesos, en lugar de invocar la Lambda desde la consola.
-- **Alimentación y montaje robustos**: un servo de mayor torque con fuente dimensionada y un gabinete para el ESP32 si se lleva a una barrera física.
+Para una barrera real se necesitarían, adicionalmente, elementos mecánicos y eléctricos adecuados, confirmación de posición y medidas de seguridad independientes; el prototipo de banco no debe considerarse un dispositivo de seguridad listo para producción.
 
 ---
 
 ## 8. Anexos
 
-**8.1 Glosario**
+Los anexos complementan el informe con definiciones, fuentes técnicas y rutas de las evidencias funcionales disponibles. Las rutas se expresan **desde `docs/informe.md`** para que funcionen como enlaces relativos al visualizar el repositorio en GitHub. Se omite deliberadamente un catálogo de evidencias de las pruebas no funcionales de la sección 4.2; sus resultados y limitaciones permanecen documentados en el cuerpo del informe.
+
+### 8.1 Glosario
 
 | Término | Definición |
 |---|---|
@@ -2284,7 +2264,7 @@ Agregar una suite que, con credenciales de prueba y un Thing de pruebas, ejecute
 | `dynamodb:LeadingKeys` | Clave de condición de IAM que restringe una acción de DynamoDB a los elementos cuya clave de partición cumple un patrón (por ejemplo, `PAIRUSER#*`). |
 | STRIDE | Clasificación de amenazas: suplantación, manipulación, repudio, divulgación de información, denegación de servicio y elevación de privilegios. |
 
-**8.2 Referencias**
+### 8.2 Referencias
 
 Enlaces comprobados el 8 de noviembre de 2026.
 
@@ -2306,4 +2286,39 @@ Enlaces comprobados el 8 de noviembre de 2026.
 - ESP32Servo — [repositorio](https://github.com/madhephaestus/ESP32Servo)
 - ESP-IDF — [FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos.html) y [Non-Volatile Storage](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html)
 - Arduino-ESP32 — [Preferences](https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/preferences.html)
+
+
+### 8.3 Evidencias de las pruebas funcionales (sección 4.1)
+
+Las siguientes rutas corresponden a las carpetas de evidencias citadas en la sección 4.1. Los videos, fotografías y hojas de registro se utilizan como respaldo de los resultados reportados; no sustituyen la lectura de los criterios de aceptación.
+
+| Prueba | Evidencia referenciada | Ruta relativa desde `docs/informe.md` |
+|---|---|---|
+| PF-01 — Medición de distancia | Fotografías, hoja de mediciones y descripción de ejecución. | [`evidencias/pruebas/PF-01/`](evidencias/pruebas/PF-01/) |
+| PF-02 — Presencia e histéresis | Video, hoja de observaciones y descripción de ejecución. | [`evidencias/pruebas/PF-02/`](evidencias/pruebas/PF-02/) |
+| PF-03 — Actualización de Shadow | Video de cambio de distancia y presencia, junto con registro de pruebas. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-04 — Apertura por Alexa | Videos de órdenes y comprobación de la barrera; registro compartido. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-05 — Cierre por Alexa | Videos de cierre y actualización de estado; registro compartido. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-06 — Consultas por voz | Registro compartido de respuestas de Alexa. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
+| PF-07 — Persistencia de vinculación | Video de cierre y reapertura de la skill. | [`evidencias/pruebas/PF-07/`](evidencias/pruebas/PF-07/) |
+| PF-08 — Rechazo de PIN inválido | Video del rechazo y observación de la vinculación. | [`evidencias/pruebas/PF-08/`](evidencias/pruebas/PF-08/) |
+
+### 8.4 Evidencias de arquitectura y configuración
+
+Las evidencias visuales correspondientes a la arquitectura y configuración de SmartPark se encuentran incorporadas en las secciones 2 y 3 del presente informe.
+
+Estas capturas permiten identificar los componentes utilizados y respaldan la documentación de las configuraciones realizadas en AWS IoT Core, AWS Lambda, DynamoDB y Alexa.
+
+Para evitar duplicar las imágenes, se presenta una relación de los recursos y su ubicación dentro del documento.
+
+| Recurso | Ubicación dentro del informe |
+|---|---|
+| Diagrama de arquitectura | [Sección 2.1 — Diagrama de arquitectura](#21-diagrama-de-arquitectura) |
+| Diagrama de conexiones | [Sección 2.2 — Diagrama de circuito](#22-diagrama-de-circuito) |
+| Thing y Device Shadow | [Sección 3.2 — Configuraciones en AWS](#32-configuraciones-en-aws) |
+| Certificado y política AWS IoT | [Sección 3.2 — Configuraciones en AWS](#32-configuraciones-en-aws) |
+| Funciones Lambda y permisos IAM | [Sección 3.2 — Configuraciones en AWS](#32-configuraciones-en-aws) |
+| Modelo de interacción y simulador de Alexa | [Sección 3.3 — Configuraciones en Alexa](#33-configuraciones-en-alexa) |
+
+**Alcance de las evidencias.** Las capturas de configuración se encuentran referenciadas dentro del desarrollo e implementación del proyecto. Las evidencias de las pruebas funcionales se organizan en la sección 8.3.
 
