@@ -244,10 +244,10 @@ Alexa **nunca** se comunica con el ESP32: la Lambda solo conoce el Shadow, y el 
 |---|---|---|---|---|
 | Objeto inteligente | ESP32 DOIT DevKit V1, Arduino-ESP32 sobre FreeRTOS | Medir la distancia, mover la barrera, reportar en `reported` y aplicar el `delta` | GPIO hacia el HC-SR04 y el SG90; MQTT/TLS hacia AWS IoT; consola serie a 115 200 baudios | [`src/`](../src/), [`include/`](../include/) |
 | Registro y Shadow | AWS IoT Core (Thing, certificado, política y Shadow clásico) | Autenticar el dispositivo, guardar el último `reported`/`desired` y calcular el `delta` | Broker MQTT (dispositivo) y API HTTPS de IoT Data (Lambda) | [`docs/aws-iot-policy.example.json`](aws-iot-policy.example.json) |
-| Skill | Alexa Skills Kit, modelo *custom* en español | Reconocer intents y el slot `codigo`, e invocar la Lambda | Solicitudes y respuestas JSON de ASK | Modelo de interacción ⏳ PENDIENTE (3.3) |
+| Skill | Alexa Skills Kit, modelo *custom* en español | Reconocer intents y el slot `codigo`, e invocar la Lambda | Solicitudes y respuestas JSON de ASK | Modelo de interacción ⏳ Modelo de interaccion descrito en la seccion 3.3 |
 | Backend de la skill | AWS Lambda `SmartParkAlexaBackend`, Python 3.13 y ASK SDK 1.19.0 | Validar la solicitud, resolver la vinculación, leer `reported` y escribir `desired` | Disparador de Alexa Skills Kit; boto3 hacia DynamoDB, IoT e IoT Data | [`lambda/lambda_function.py`](../lambda/lambda_function.py), [`handlers/`](../lambda/handlers/), [`services/`](../lambda/services/) |
 | Generador de PIN | AWS Lambda `SmartParkPairingAdmin`, Python 3.13 y boto3 | Crear la ventana de intentos y la autorización del PIN | Invocación manual con IAM; boto3 hacia DynamoDB e IoT | [`lambda/admin_lambda_function.py`](../lambda/admin_lambda_function.py), [`administration/`](../lambda/administration/) |
-| Persistencia | Amazon DynamoDB, tabla `SmartParkBindings` | Vinculaciones, autorizaciones de PIN y ventanas de intentos | API HTTPS de DynamoDB (`GetItem`, `UpdateItem`, `DeleteItem`, `TransactWriteItems`) | Definición real ⏳ PENDIENTE (3.2.5) |
+| Persistencia | Amazon DynamoDB, tabla `SmartParkBindings` | Vinculaciones, autorizaciones de PIN y ventanas de intentos | API HTTPS de DynamoDB (`GetItem`, `UpdateItem`, `DeleteItem`, `TransactWriteItems`) | Estructura y configuración documentadas en la sección 3.2.5; contrastar con la definición desplegada en AWS. |
 
 **Protocolos y puertos.**
 
@@ -348,7 +348,7 @@ flowchart LR
     EGND --> GND
 ```
 
-El diagrama separa los dos dominios de alimentación: el ESP32 se alimenta por USB y la fuente externa alimenta el riel de 5 V del sensor y del servo, sin unir sus salidas positivas. La única unión entre ambos dominios es la **tierra común**, imprescindible para que el PWM de GPIO 18 y el TRIG de GPIO 32 tengan la misma referencia que los módulos. La señal ECHO, de 5 V, solo llega a GPIO 35 a través del divisor R1/R2. La alimentación del HC-SR04 sigue el mismo supuesto que la Figura 2 y queda sujeta al mismo PENDIENTE.
+El diagrama separa los dos dominios de alimentación: el ESP32 se alimenta por USB y la fuente externa alimenta el riel de 5 V del sensor y del servo, sin unir sus salidas positivas. La única unión entre ambos dominios es la **tierra común**, imprescindible para que el PWM de GPIO 18 y el TRIG de GPIO 32 tengan la misma referencia que los módulos. La señal ECHO, de 5 V, solo llega a GPIO 35 a través del divisor R1/R2. La alimentación del HC-SR04 se representa desde el riel externo de 5 V, conforme al esquema de la figura 2. Esta conexión debe contrastarse con el montaje físico, ya que la documentación también contempla la posibilidad de utilizar el pin VIN/5V del ESP32.
 
 **Análisis de consumo eléctrico.** Lo que puede afirmarse sin medir es lo siguiente:
 
@@ -1339,7 +1339,7 @@ Los dos registros nacen juntos en una transacción de dos `Put` ([`pairing_servi
 | Categoría | Amenaza concreta | Mitigación existente en el código o la configuración | Riesgo residual |
 |---|---|---|---|
 | Suplantación (*Spoofing*) | Otro cliente MQTT se hace pasar por el ESP32 | TLS mutuo con X.509 y política `iot:Connect` limitada al client ID `smartpark-grupo9-01` | Si se filtra `secrets.h` o el binario (que contiene las credenciales), el certificado debe revocarse en AWS. |
-| Suplantación | Una skill ajena o una solicitud fabricada invoca la Lambda | Disparador restringido al Skill ID y comparación de `applicationId` en [`lambda_handler()`](../lambda/lambda_function.py#L33-L45) | Depende de configurar bien el disparador (⏳ PENDIENTE de captura, 3.3). |
+| Suplantación | Una skill ajena o una solicitud fabricada invoca la Lambda | Disparador restringido al Skill ID y comparación de `applicationId` en [`lambda_handler()`](../lambda/lambda_function.py#L33-L45) | La protección depende de restringir correctamente el disparador de Alexa Skills Kit al Skill ID autorizado. La configuración se describe en la sección 3.3, aunque no se dispone de una captura específica que permita verificarla visualmente.|
 | Suplantación | Otra persona usa la cuenta de Alexa del usuario | — | Sin mitigar: quien comparte la cuenta comparte el `userId` y no hay reconocimiento de voz. |
 | Manipulación (*Tampering*) | Alguien adivina el PIN de otro usuario | El PIN solo vale para el `allowedUserId`; 3 intentos atómicos, 300 s y un solo uso | 3 / 9 000 ≈ 0,033 % por ventana. |
 | Manipulación | Una orden vieja o reordenada mueve la barrera | `version` descarta `delta` atrasados; `applyDesired()` acepta solo `"abierta"` y `"cerrada"` | Una orden legítima pero tardía se aplica igual; es el comportamiento esperado del Shadow. |
@@ -1682,7 +1682,7 @@ La captura aportada muestra `SUCCESS`, RAM de 46 924 / 327 680 bytes (14,3 %) y 
 
 ### 3.2 Configuraciones en AWS
 
-> Los valores de esta sección son los definidos en los archivos del proyecto. Lo que solo puede confirmarse en la consola de AWS aparece como PENDIENTE.
+> **Alcance de la documentación:** los valores presentados corresponden a los archivos de configuración y a la información disponible del proyecto. Los parámetros que dependen exclusivamente de la consola de AWS se identifican como no verificados cuando no existe una evidencia que permita confirmar su configuración real.
 
 **Procedimiento de despliegue reproducible** (todo en `us-east-1`; los valores entre `<>` son marcadores, no datos reales):
 
@@ -1772,7 +1772,7 @@ Las capturas muestran `TABLE_NAME=SmartParkBindings` en ambas funciones y `ALEXA
 | Tipos de registro | Vinculación, autorización de PIN (`PAIR#`) y ventana de intentos (`PAIRUSER#`), según 2.7 |
 | Lecturas | `GetItem` con `ConsistentRead=True`. Sin `Scan` ni `Query`. |
 | TTL | No habilitado. El README advierte que no se habilite sobre `expiresAt` sin revisar la política. |
-| Modo de capacidad | ⏳ PENDIENTE |
+| Modo de capacidad | No verificado en la configuración desplegada de DynamoDB. |
 
 
 **3.2.6 Roles IAM y permisos**
@@ -1786,7 +1786,7 @@ La captura confirma `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y una políti
 
 | Rol | Asignado (según el repositorio) | Justificación de la asignación | Mínimo para producción (política de ejemplo) |
 |---|---|---|---|
-| `SmartParkAlexaBackend` | Captura de IAM: `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y política de logs `AWSLambdaBasicExecutionRole…` | ⏳ PENDIENTE: confirmar con el grupo el motivo de la asignación. | Ver [`alexa-execution-policy.example.json`](../lambda/iam/alexa-execution-policy.example.json) y la tabla siguiente. |
+| `SmartParkAlexaBackend` | Captura de IAM: `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y política de logs `AWSLambdaBasicExecutionRole…` | La configuración documentada utiliza políticas administradas con permisos amplios. No se dispone de una justificación verificada de su asignación; para un entorno de producción se recomienda sustituirlas por políticas de mínimo privilegio. | Ver [`alexa-execution-policy.example.json`](../lambda/iam/alexa-execution-policy.example.json) y la tabla siguiente. |
 | `SmartParkPairingAdmin` | No consta (rol a crear manualmente) | — | [`admin-execution-policy.example.json`](../lambda/iam/admin-execution-policy.example.json): `dynamodb:PutItem` solo con claves `PAIR#*` y `PAIRUSER#*`, y `iot:DescribeThing` sobre los Things gestionados. |
 | Operador administrador | No consta | — | [`admin-invoke-policy.example.json`](../lambda/iam/admin-invoke-policy.example.json): `lambda:InvokeFunction` solo sobre `SmartParkPairingAdmin`. |
 | Confianza de ambos roles | — | — | [`execution-role-trust.example.json`](../lambda/iam/execution-role-trust.example.json): `sts:AssumeRole` para `lambda.amazonaws.com`. |
@@ -2287,21 +2287,24 @@ Enlaces comprobados el 8 de noviembre de 2026.
 - ESP-IDF — [FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos.html) y [Non-Volatile Storage](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html)
 - Arduino-ESP32 — [Preferences](https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/preferences.html)
 
+### 8.3 Evidencias de las pruebas funcionales
 
-### 8.3 Evidencias de las pruebas funcionales (sección 4.1)
+Las evidencias de las pruebas funcionales de SmartPark se encuentran organizadas en el directorio `docs/evidencias/pruebas/`. Se incluyen fotografías, videos, hojas de cálculo y registros que complementan los procedimientos y resultados presentados en la sección 4.1.
 
-Las siguientes rutas corresponden a las carpetas de evidencias citadas en la sección 4.1. Los videos, fotografías y hojas de registro se utilizan como respaldo de los resultados reportados; no sustituyen la lectura de los criterios de aceptación.
-
-| Prueba | Evidencia referenciada | Ruta relativa desde `docs/informe.md` |
+| Prueba | Descripción | Evidencias |
 |---|---|---|
-| PF-01 — Medición de distancia | Fotografías, hoja de mediciones y descripción de ejecución. | [`evidencias/pruebas/PF-01/`](evidencias/pruebas/PF-01/) |
-| PF-02 — Presencia e histéresis | Video, hoja de observaciones y descripción de ejecución. | [`evidencias/pruebas/PF-02/`](evidencias/pruebas/PF-02/) |
-| PF-03 — Actualización de Shadow | Video de cambio de distancia y presencia, junto con registro de pruebas. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
-| PF-04 — Apertura por Alexa | Videos de órdenes y comprobación de la barrera; registro compartido. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
-| PF-05 — Cierre por Alexa | Videos de cierre y actualización de estado; registro compartido. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
-| PF-06 — Consultas por voz | Registro compartido de respuestas de Alexa. | [`evidencias/pruebas/PF-03 - PF-04 - PF-05 - PF-06/`](evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/) |
-| PF-07 — Persistencia de vinculación | Video de cierre y reapertura de la skill. | [`evidencias/pruebas/PF-07/`](evidencias/pruebas/PF-07/) |
-| PF-08 — Rechazo de PIN inválido | Video del rechazo y observación de la vinculación. | [`evidencias/pruebas/PF-08/`](evidencias/pruebas/PF-08/) |
+| **PF-01** | Medición de distancia con HC-SR04 a 10, 20 y 30 cm. | [Fotos 10 cm](./evidencias/pruebas/PF-01/pf01-10cm.jpeg) · [Fotos 20 cm](./evidencias/pruebas/PF-01/pf01-20cm.jpeg) · [Fotos 30 cm](./evidencias/pruebas/PF-01/pf01-30cm.jpeg) · [Resultados](./evidencias/pruebas/PF-01/pf01.xlsx) |
+| **PF-02** | Detección de presencia mediante sensor ultrasónico. | [Video](./evidencias/pruebas/PF-02/pf02.mp4) · [Resultados](./evidencias/pruebas/PF-02/pf02.xlsx) |
+| **PF-03** | Actualización de estados en AWS IoT Device Shadow. | [Video](./evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/pf03.mp4) |
+| **PF-04** | Apertura de la barrera mediante Alexa. | [Video 1](./evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/pf04-05-062.mp4) · [Registro](./evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/PF04%20-%20pf05.xlsx) |
+| **PF-05** | Cierre de la barrera mediante Alexa. | [Video 2](./evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/pf04-05-063.mp4) · [Registro](./evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/PF04%20-%20pf05.xlsx) |
+| **PF-06** | Consultas del sensor y del estado de la barrera mediante Alexa. | [Videos y documentación](./evidencias/pruebas/PF-03%20-%20PF-04%20-%20PF-05%20-%20PF-06/README.md) |
+| **PF-07** | Verificación de la persistencia de la vinculación en DynamoDB. | [Video](./evidencias/pruebas/PF-07/pf-07.mp4) · [Documentación](./evidencias/pruebas/PF-07/README.md) |
+| **PF-08** | Rechazo de un PIN incorrecto durante la vinculación. | [Video](./evidencias/pruebas/PF-08/pf-08.mp4) · [Documentación](./evidencias/pruebas/PF-08/README.md) |
+
+Las evidencias se presentan mediante enlaces para evitar duplicar archivos multimedia dentro del informe. Las fotografías y los videos pueden consultarse desde sus ubicaciones originales en el repositorio.
+
+Los registros disponibles respaldan las pruebas descritas en la sección 4.1. Esta organización facilita la trazabilidad entre cada caso de prueba y su documentación correspondiente.
 
 ### 8.4 Evidencias de arquitectura y configuración
 
