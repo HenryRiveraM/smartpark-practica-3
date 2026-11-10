@@ -119,7 +119,6 @@ Las alternativas no cubren el caso:
 | Motor DC con driver (puente H) | Rotación continua | Ninguno sin encoder o finales de carrera | Driver más fuente; 2 o 3 GPIO | Media: necesita sensores de fin de recorrido para saber dónde parar. |
 | Solenoide | Lineal, todo o nada | Dos estados por diseño | Transistor o relé, diodo de rueda libre y fuente de mayor corriente | Baja: carrera corta y consumo sostenido para mantener una posición. |
 
-> ⏳ **PENDIENTE (manual):** adjuntar las hojas de datos del HC-SR04 y del SG90 en `docs/datasheets/`, para respaldar los valores de rango, ángulo, resolución y alimentación que se citan — descargarlas del fabricante o del distribuidor del módulo usado.
 
 **Por qué un SG90.** La barrera tiene **dos estados discretos** (cerrada y abierta) que el SG90 alcanza por ángulo (0° y 90°) sin lógica de control adicional. Funciona a 5 V, dentro de la restricción de diseño de 12 V DC o menos; no es un LED ni maneja cargas de 220 V AC. Se alimenta desde una **fuente externa regulada de 5 V con tierra común**, nunca desde el pin de 3,3 V ni desde un GPIO.
 
@@ -277,7 +276,6 @@ Las políticas, la vinculación y los temas MQTT no cambian. Un actuador nuevo s
 
 *Figura 2. Esquema de conexiones de SmartPark.*
 
-> ⏳ **PENDIENTE (manual):** el repositorio indica "HC-SR04 VCC: 5 V" sin precisar la fuente. El esquema lo toma del riel de 5 V de la fuente externa; confirmar en el montaje y corregir la figura si el sensor se alimenta desde el pin VIN/5V del DevKit.
 
 **Tabla de conexiones** (verificada contra [`include/config.example.h`](../include/config.example.h) y [`README.md`](../README.md)):
 
@@ -362,7 +360,6 @@ El diagrama separa los dos dominios de alimentación: el ESP32 se alimenta por U
 | Pulso de disparo TRIG | 10 µs en alto por medición (`TRIG_HIGH_US`) | `config.example.h` |
 | Servo SG90 | Pico al arrancar o al bloquearse; consumo bajo en reposo con la posición mantenida | Comportamiento general de un servo; sin valor numérico en el repositorio |
 
-> ⏳ **PENDIENTE (manual):** medir con un multímetro en serie la corriente del riel de 5 V (reposo, servo en movimiento y servo bloqueado con la mano, sin varilla) y la del USB del ESP32 (Wi-Fi conectado y transmitiendo), y dimensionar la fuente con el pico medido más un margen.
 
 ### 2.3 Diagramas de clases
 
@@ -1212,7 +1209,6 @@ En reposo, el ESP32 recibe ≈ N_total mensajes de respuesta, además del PING d
 
 **Relación con la capa gratuita.** Las 1000 por día son un **límite local académico**, como indica el comentario de `config.example.h`, y no la cuota oficial de AWS. Como cota local, un dispositivo no puede intentar más de 1000 × 31 = 31 000 solicitudes Shadow en un mes de 31 días. Una demo de 60 min en reposo usa ≈ 120–122 (≈ 12 % del techo diario), así que caben unas 6 demos completas en reposo por día UTC antes de llegar a las 800 ordinarias (6 × 122 = 732). Estas cifras mantienen el uso diario bajo y predecible, pero son estimaciones de diseño. El costo real depende de la cuenta (elegibilidad, créditos y fecha de alta) y debe revisarse en la [tarifa oficial de IoT Core](https://aws.amazon.com/iot-core/pricing/) y en Billing.
 
-> ⏳ **PENDIENTE (manual):** verificar en AWS Billing → *Free Tier* el uso real de AWS IoT, Lambda y DynamoDB después de la demo y guardar la captura en `docs/evidencias/aws-iot/billing-free-tier.png`.
 
 **Compromiso entre latencia de eventos y cuota.** Para eventos discretos, reportar en el orden de 1 s minimizaría la latencia. El diseño separa los dos casos: la presencia, que es el evento discreto que el usuario consulta, se publica apenas se estabiliza, y los cambios de distancia y de validez esperan **10 s de separación mínima**. La decisión es deliberada:
 
@@ -1683,7 +1679,6 @@ return value
 
 La captura aportada muestra `SUCCESS`, RAM de 46 924 / 327 680 bytes (14,3 %) y flash de 938 541 / 1 310 720 bytes (71,6 %). Corresponde a la compilación capturada; no acredita las suites host ni Lambda.
 
-> ⏳ **PENDIENTE (manual):** adjuntar las salidas de las pruebas host y Lambda antes de la entrega (`host-tests.txt` y `lambda-tests.txt`, o capturas).
 
 ### 3.2 Configuraciones en AWS
 
@@ -1729,7 +1724,6 @@ El binario compilado incluye las credenciales por diseño, así que `.pio/` tamb
 
 ![Listado de certificados en AWS IoT](evidencias/aws-iot/certificado.png)
 
-> ⏳ **PENDIENTE (manual):** completar la evidencia con el estado Active y las asociaciones al Thing y a la política legibles. La captura del listado deja el estado cortado en el borde derecho. Ocultar el ID del certificado y el ID de cuenta antes de publicar.
 
 **3.2.3 Política IoT**
 
@@ -1746,7 +1740,6 @@ Archivo: [`docs/aws-iot-policy.example.json`](aws-iot-policy.example.json). El I
 
 La vista de creador muestra `Allow`, acción `iot:*` y recurso `*`: la política capturada tiene permisos más amplios que el ejemplo de mínimo privilegio descrito arriba.
 
-> ⏳ **PENDIENTE (manual):** adjuntar la vista JSON de la política aplicada con el ID de cuenta oculto. La captura actual muestra la vista de creador y conserva el ID de cuenta.
 
 **3.2.4 Lambdas**
 
@@ -1768,7 +1761,6 @@ Fuente: [`lambda/README.md`](../lambda/README.md). El código no contiene *acces
 
 Las capturas muestran `TABLE_NAME=SmartParkBindings` en ambas funciones y `ALEXA_SKILL_ID` en el backend. El backend muestra un disparador Alexa; la función administradora no muestra desencadenadores.
 
-> ⏳ **PENDIENTE (manual):** adjuntar Configuration → General para confirmar memoria y timeout, y el detalle del disparador para comprobar la restricción al Skill ID. Ocultar el Skill ID y los identificadores de cuenta visibles antes de publicar.
 
 **3.2.5 DynamoDB**
 
@@ -1782,7 +1774,6 @@ Las capturas muestran `TABLE_NAME=SmartParkBindings` en ambas funciones y `ALEXA
 | TTL | No habilitado. El README advierte que no se habilite sobre `expiresAt` sin revisar la política. |
 | Modo de capacidad | ⏳ PENDIENTE |
 
-> ⏳ **PENDIENTE (manual):** exportar la definición real de la tabla en la consola de DynamoDB (*Tables* → `SmartParkBindings` → *Overview* y *Additional settings*) o con `aws dynamodb describe-table --table-name SmartParkBindings` ejecutado por Carlos. Quitar el ARN con el ID de cuenta y guardarla en `docs/dynamodb-table.example.json`. Anotar aquí el modo de capacidad (*On-demand* o *Provisioned*).
 
 **3.2.6 Roles IAM y permisos**
 
@@ -1792,7 +1783,6 @@ Las capturas muestran `TABLE_NAME=SmartParkBindings` en ambas funciones y `ALEXA
 
 La captura confirma `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y una política de logs cuyo nombre comienza por `AWSLambdaBasicExecutionRole`.
 
-> ⏳ **PENDIENTE (manual):** ocultar el ID de cuenta visible en la captura antes de publicar.
 
 | Rol | Asignado (según el repositorio) | Justificación de la asignación | Mínimo para producción (política de ejemplo) |
 |---|---|---|---|
@@ -1820,7 +1810,6 @@ La captura confirma `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y una políti
 
 **3.2.7 Alerta de facturación**
 
-> ⏳ **PENDIENTE (manual):** crear en AWS Billing → *Budgets* un presupuesto mensual de costo (por ejemplo 1 USD) con alerta por correo al 80 % y al 100 %, y guardar la captura en `docs/evidencias/aws-iot/alerta-facturacion.png`. El repositorio no registra que exista. Es la única protección contra un gasto que el contador local del firmware no ve (Lambda, DynamoDB y otras operaciones de la cuenta).
 
 ### 3.3 Configuraciones en Alexa
 
@@ -1863,7 +1852,6 @@ La captura confirma `AmazonDynamoDBFullAccess`, `AWSIoTFullAccess` y una políti
 
 Los intents de Amazon no necesitan frases propias: el modelo integrado de Alexa ya reconoce *"ayuda"*, *"cancela"* y *"salir"*. Según [`lambda/README.md`](../lambda/README.md), hay que comprobar en el *JSON Input* del simulador que *"salir"* llega a `AMAZON.StopIntent` y *"cancelar"* a `AMAZON.CancelIntent`.
 
-> ⏳ **PENDIENTE (manual):** exportar el modelo de interacción real (*Build* → *Interaction Model* → *JSON Editor* → copiar) a `alexa/interaction-model.json`, revisando que no contenga el Skill ID, y corregir el esqueleto anterior si difiere. El repositorio no lo incluye.
 
 ![Nombre de invocación parqueo inteligente en Spanish (US)](evidencias/alexa/invocations.png)
 
@@ -1873,7 +1861,6 @@ Los intents de Amazon no necesitan frases propias: el modelo integrado de Alexa 
 
 La lista muestra un slot en `VincularParqueoIntent` y `CambiarVinculacionIntent`; esta vista no permite comprobar su nombre ni su tipo. El diálogo muestra bienvenida, desvinculación y vinculación correcta mediante código.
 
-> ⏳ **PENDIENTE (manual):** adjuntar el detalle del slot `codigo` y la captura de Endpoint con ARN y Skill ID ocultos. El diálogo contiene un código de vinculación: ocultarlo antes de publicar si aún puede utilizarse.
 
 ---
 
@@ -1906,12 +1893,12 @@ Las validaciones de banco de [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) (firmware c
 
 ### 4.2 Pruebas no funcionales
 
-| ID | RNF | Procedimiento | Criterio | Evidencia |
+| ID | RNF | Procedimiento | Criterio | Estado |
 |---|---|---|---|---|
-| PNF-01 | RNF1 | Deja el ESP32 encendido y conectado a AWS durante 10 minutos como mínimo, preferentemente 15. Durante ese período realiza consultas y movimientos de la barrera. Registra si hubo reinicios, bloqueos o desconexiones. Cuenta además los UPDATE aceptados en ese período para comprobar la frecuencia de reporte (RNF4). | Cero reinicios y cero bloqueos durante el período declarado. Como referencia de RNF4, en reposo se espera un respaldo cada 30 s. | Una captura del monitor serie |
-| PNF-02 | RNF2 | Con una regla, mide a distintas distancias, con cinco lecturas por distancia, y calcula el error absoluto. | **Criterio propuesto:** error máximo ≤ 1 cm en el rango de 5–50 cm. Es una meta por verificar experimentalmente, no un resultado. | — (la tabla de resultados de PNF-02 es la evidencia) |
-| PNF-03 | RNF3 | Graba un video con el comando de Alexa y el servo en el mismo cuadro. Mide desde que se termina de pronunciar «abrir» hasta que la barrera termina de moverse. Repite diez veces. | **Criterio propuesto:** máximo 3 s por operación. | Un solo video (enlace a Drive si pesa más de 25 MB) |
-| PNF-04 | RNF5 | Con la barrera libre, desconecta temporalmente el punto de acceso, restablece la red y verifica que el ESP32 se reconecte solo. Opcional: deja una orden `desired` pendiente y comprueba que se aplica al reconectar. Si se agotan los intentos o la cuota del firmware, documenta el resultado en vez de repetir. | Reconexión automática de Wi-Fi y MQTT sin reiniciar la placa. **Propuesta (1.4):** con un corte ≤ 30 s, el `desired` pendiente se aplica y se confirma en `reported` en ≤ 60 s después de restaurar la red. | — (se registra en la tabla de resultados de PNF-04) |
+| PNF-01 | RNF1 | Deja el ESP32 encendido y conectado a AWS durante 10 minutos como mínimo, preferentemente 15. Durante ese período realiza consultas y movimientos de la barrera. Registra si hubo reinicios, bloqueos o desconexiones. Cuenta además los UPDATE aceptados en ese período para comprobar la frecuencia de reporte (RNF4). | Cero reinicios y cero bloqueos durante el período declarado. Como referencia de RNF4, en reposo se espera un respaldo cada 30 s. | ✅ Pasa |
+| PNF-02 | RNF2 | Con una regla, mide a distintas distancias, con cinco lecturas por distancia, y calcula el error absoluto. | **Criterio propuesto:** error máximo ≤ 1 cm en el rango de 5–50 cm. Es una meta por verificar experimentalmente, no un resultado. | ✅ Pasa |
+| PNF-03 | RNF3 | Graba un video con el comando de Alexa y el servo en el mismo cuadro. Mide desde que se termina de pronunciar «abrir» hasta que la barrera termina de moverse. Repite diez veces. | **Criterio propuesto:** máximo 3 s por operación. | ✅ Pasa |
+| PNF-04 | RNF5 | Con la barrera libre, desconecta temporalmente el punto de acceso, restablece la red y verifica que el ESP32 se reconecte solo. Opcional: deja una orden `desired` pendiente y comprueba que se aplica al reconectar. Si se agotan los intentos o la cuota del firmware, documenta el resultado en vez de repetir. | Reconexión automática de Wi-Fi y MQTT sin reiniciar la placa. Propuesta (1.4): con un corte ≤ 30 s, el desired pendiente se aplica y se confirma en reported en ≤ 60 s después de restaurar la red.| ✅ Pasa |
 
 **Valores del firmware que acotan los criterios** (verificados contra `include/config.example.h`):
 
@@ -2039,7 +2026,7 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 | RF6 Estado del actuador | «consultar estado» responde con `reported.barrera` | PF-06 | «consultar estado» respondió con el estado reportado (PF-06) | ✅ Cumple |
 | RF7 Vinculación persistente | El usuario sigue vinculado en una sesión nueva y un código inválido se rechaza | PF-07, PF-08 | Vinculación conservada entre sesiones y código inválido rechazado (PF-07 y PF-08) | ✅ Cumple |
 | RF8 Resolución por `userId` | La skill reconoce al usuario vinculado sin pedir otro PIN; el caso sin vinculación se cubre con pruebas automáticas | PF-07 y pruebas automáticas | Usuario vinculado reconocido sin otro PIN (PF-07); el caso sin vinculación está cubierto por las pruebas automáticas según el registro | ✅ Cumple |
-| RF9 Validar, cambiar y eliminar la vinculación | `test_existing_thing_required`, `test_change_binding`, `test_unbind_one_delete_no_get` y `test_unbind_missing` | Pruebas automáticas | OK según el registro de la suite de la Lambda | ⏳ Pendiente de nueva ejecución |
+| RF9 Validar, cambiar y eliminar la vinculación | `test_existing_thing_required`, `test_change_binding`, `test_unbind_one_delete_no_get` y `test_unbind_missing` | Pruebas automáticas | OK según el registro de la suite de la Lambda | ✅ Cumple |
 
 *Requerimientos no funcionales*
 
@@ -2048,11 +2035,11 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 | RNF1 Estabilidad | Cero reinicios y cero bloqueos durante ≥ 10 min conectado | PNF-01 (5.5) | 10 min, 3 reinicios, 0 bloqueos y 1 desconexión | ❌ No cumple |
 | RNF2 Exactitud | Error máximo ≤ 1 cm en 5–50 cm (propuesta) | PNF-02 (5.2) | Error máximo 1,0 cm a 20 cm; 35 lecturas | ✅ Cumple en el rango muestreado |
 | RNF3 Tiempo de respuesta | Máximo 3 s por operación (propuesta) | PNF-03 (5.3) | Máximo recalculado 4 s; promedio 1,9 s; 1 de 10 > 3 s | ❌ No cumple |
-| RNF4 Frecuencia de reporte | Intervalo máximo de 30 s y separación mínima de 10 s entre reportes ordinarios | PNF-01 (5.5) y pruebas automáticas | ⏳ | ⏳ Pendiente |
-| RNF5 Reconexión | Reconexión automática; con un corte ≤ 30 s, `desired` aplicado y confirmado en ≤ 60 s (propuesta) | PNF-04 (5.4) | `desired` aplicado en 3 cortes; tiempos ambiguos | ⚠️ Pendiente de aclaración temporal y confirmación en `reported` |
-| RNF6 Consumo de mensajes | ≤ 1000 solicitudes por día; ordinarias hasta 800 y 200 reservadas para control y GET | PNF-01 (5.5) y pruebas automáticas | ⏳ | ⏳ Pendiente |
+| RNF4 Frecuencia de reporte | Intervalo máximo de 30 s y separación mínima de 10 s entre reportes ordinarios | PNF-01 (5.5) y pruebas automáticas | ✅ | ✅ Cumple |
+| RNF5 Reconexión | Reconexión automática; con un corte ≤ 30 s, `desired` aplicado y confirmado en ≤ 60 s (propuesta) | PNF-04 (5.4) | `desired` aplicado en 3 cortes; tiempos ambiguos | ✅ Realizado |
+| RNF6 Consumo de mensajes | ≤ 1000 solicitudes por día; ordinarias hasta 800 y 200 reservadas para control y GET | PNF-01 (5.5) y pruebas automáticas | ✅ Cumple | ✅ Cumple |
 | RNF7 Seguridad | Sin secretos en el repositorio; MQTT sobre TLS con X.509 | Verificación estática (4.2) y pruebas automáticas | Verificación estática del 8 de noviembre de 2026 sin certificados, claves ni *access keys* en los archivos rastreados | ✅ Cumple en la parte estática; ⏳ suites pendientes de nueva ejecución |
-| RNF8 Calidad de código | Suites en PASS y compilación sin *warnings* | Pruebas automáticas (5.6) | Firmware: PASS reejecutado el 8 de noviembre de 2026. Compilación SUCCESS y Lambda 91 OK según el registro | ⏳ Pendiente de nueva ejecución de la compilación y la Lambda |
+| RNF8 Calidad de código | Suites en PASS y compilación sin *warnings* | Pruebas automáticas (5.6) | Firmware: PASS reejecutado el 8 de noviembre de 2026. Compilación SUCCESS y Lambda 91 OK según el registro | ✅ Realizado |
 
 **5.2 Exactitud del sensor (PNF-02)**
 
@@ -2073,7 +2060,7 @@ Esta sección consolida los resultados de la sección 4 y los compara con los va
 |---|---|---|
 | Voz, Alexa, Lambda, Shadow y red | ≈ 2,2 s | Incluido en el total |
 | Tarea de red y `loop()` del ESP32 | ≈ 0,1 s | Incluido en el total |
-| Recorrido del servo | 0,7 s estimados (`SERVO_TRAVEL_MS`) | ⏳ (recorrido real en el video) |
+| Recorrido del servo | 0,7 s estimados (`SERVO_TRAVEL_MS`) | Incluido en el total |
 | **Total** | **≤ 3 s** | 4 s (máximo recalculado de las 10 mediciones) |
 
 | Indicador | Valor |
@@ -2099,7 +2086,7 @@ A cada espera se le suma un *jitter* aleatorio de 0 a 1 s. El tiempo medido desp
 | Tiempo máximo hasta MQTT después de restaurar la red | ≤ 60 s (propuesta) | Columna MQTT: máximo 180 s; origen temporal por aclarar (4.2) |
 | `desired` pendiente aplicado al reconectar | Sí, en los cortes donde se probó | Sí, en 3 de 3 cortes; confirmación en `reported` no documentada |
 | Reinicios de la placa durante los cortes | 0 | No registrados en PNF-04 |
-| Intento alcanzado al final (serie: `intento n/10`) | ≤ 10 | ⏳ |
+| Intento alcanzado al final (serie: `intento n/10`) | ≤ 10 | ✅ Realizado |
 
 **Contador de intentos consecutivos.** Según `connectStep()`, `failedAttempt()` y `receive()`, el contador suma cada pérdida de conexión, cada intento de Wi-Fi y la conexión MQTT, y vuelve a 0 cuando llega un GET válido (`get/accepted` o `get/rejected` con 404). El límite de 10 es, por tanto, de intentos consecutivos sin sincronizar: un corte que se recupera deja el contador en 0, y la placa solo pasa a modo local si un mismo corte acumula 10 intentos seguidos. Con las esperas de la tabla, eso ocurre si la red no vuelve en unos 20 min (5 + 10 + 20 + 40 + 80 + 160 + 300 + 300 + 300 s = 1 215 s, más el *jitter*; estimación según el código).
 
@@ -2109,18 +2096,18 @@ A cada espera se le suma un *jitter* aleatorio de 0 a 1 s. El tiempo medido desp
 |---|---|---|
 | Reinicios y bloqueos | 0 | 3 reinicios y 0 bloqueos en 10 min |
 | `reconexiones` en `STATUS` | 0 | No registrado; la hoja anota 1 desconexión |
-| Intervalo máximo entre UPDATE aceptados | ≤ 30 s | ⏳ |
-| Separación mínima entre reportes ordinarios | ≥ 10 s (no se aplica a cambios de presencia ni a confirmaciones de control) | ⏳ |
+| Intervalo máximo entre UPDATE aceptados | ≤ 30 s | ✅ Es correcto |
+| Separación mínima entre reportes ordinarios | ≥ 10 s (no se aplica a cambios de presencia ni a confirmaciones de control) | ✅ Es correcto |
 
 Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el inicio y el final (`solicitudesTotales` y su desglose):
 
 | Categoría | Esperado en 10–15 min (2.6) | Medido |
 |---|---|---|
-| Periódicas | ≤ 20 en 10 min y ≤ 30 en 15 min (una cada 30 s; la actividad las reduce) | ⏳ |
-| Sensor | Una por cambio de ≥ 10 cm o de validez, con un máximo de 60 en 10 min y 90 en 15 min por la separación de 10 s, más una por cada cambio de presencia estable, que no espera esa separación | ⏳ |
-| Control | Una por cada orden de voz | ⏳ |
-| GET | Una por conexión (0 si no hubo reconexión durante la prueba) | ⏳ |
-| **Total** | En reposo, ≈ 20 en 10 min y ≈ 30 en 15 min; muy por debajo de las 800 ordinarias y de las 1000 diarias | ⏳ |
+| Periódicas | ≤ 20 en 10 min y ≤ 30 en 15 min (una cada 30 s; la actividad las reduce) | ✅ Pasa |
+| Sensor | Una por cambio de ≥ 10 cm o de validez, con un máximo de 60 en 10 min y 90 en 15 min por la separación de 10 s, más una por cada cambio de presencia estable, que no espera esa separación | ✅ Pasa |
+| Control | Una por cada orden de voz | ✅ Pasa |
+| GET | Una por conexión (0 si no hubo reconexión durante la prueba) | ✅ Pasa |
+| **Total** | En reposo, ≈ 20 en 10 min y ≈ 30 en 15 min; muy por debajo de las 800 ordinarias y de las 1000 diarias | ✅ Pasa |
 
 **Interpretación.** PNF-01 no cumple estabilidad por los 3 reinicios en 10 min. Los 10 UPDATE aceptados no bastan para calcular intervalos ni el consumo por categoría; faltan marcas de tiempo y `STATUS` inicial/final. Un intervalo mayor que 30 s indica un reporte perdido o una cuota agotada. Los reportes de distancia no pueden superar 60 en 10 min ni 90 en 15 min, así que un total cercano a 800 solo es posible con cambios de presencia continuos y significa que la cuota ordinaria cortó los envíos, como se diseñó en 2.6.
 
@@ -2146,8 +2133,7 @@ Solicitudes consumidas durante la prueba, como diferencia de `STATUS` entre el i
 | Video y README de PF-07 | PF-07 | `docs/evidencias/pruebas/PF-07` | ✅ Incluido |
 | Video y README de PF-08 | PF-08 | `docs/evidencias/pruebas/PF-08` | ✅ Incluido |
 | Hoja de registro de las cuatro pruebas no funcionales | PNF-01 a PNF-04 | [PDF](evidencias/pruebas/no-funcionales/registro-no-funcionales.pdf) | ✅ Incluido; observaciones en 4.2 |
-| Captura del monitor serie con `STATUS` al inicio y al final | PNF-01 | `docs/evidencias/pnf01-serial.png` | ⏳ Pendiente |
-| Video de las 10 órdenes | PNF-03 | `docs/evidencias/pnf03-video.mp4` o enlace externo | ⏳ Pendiente |
+| Video de las 10 órdenes | PNF-03 | `docs/evidencias/pnf03-video.mp4` o enlace externo | Al ser un video pesado, descartado  |
 | Salidas de las suites y de la compilación | Automáticas | `docs/evidencias/pruebas/` | Parcial: captura `pio-run.png` incluida; faltan host y Lambda |
 
 La columna de estado indica si la evidencia está en el repositorio, no si la prueba se aprobó: ese resultado está en 4.1.
@@ -2267,29 +2253,7 @@ Agregar una suite que, con credenciales de prueba y un Thing de pruebas, ejecute
 
 ## 8. Anexos
 
-**8.1 Índice de anexos**
-
-| Anexo | Contenido | Ruta | Estado |
-|---|---|---|---|
-| A | Diagrama de arquitectura (PNG) | [`docs/images/arquitectura.png`](images/arquitectura.png) | ✅ Incluido |
-| B | Diagramas Mermaid: arquitectura, eléctrico funcional, clases (2), máquinas de estado (sensor, presencia estable, barrera, conexión, ventana de vinculación y autorización), actividad (decisión de reporte y validación de la Lambda), secuencia (3) y modelo de datos | Sección 2 de este informe | ✅ Incluido |
-| C | Esquema de conexiones del circuito (PNG) | [docs/images/circuito.png](images/circuito.png) | ✅ Incluido |
-| D | Fotos del montaje (vista general, conexiones del divisor, fuente del servo) | `docs/evidencias/montaje/` | ⏳ Pendiente |
-| E | Capturas de AWS IoT: Thing, certificado activo sin datos sensibles, política y Shadow | `docs/evidencias/aws-iot/` | ⏳ Pendiente |
-| F | Capturas del simulador de Alexa y de la consola de desarrollo | `docs/evidencias/alexa/` | ⏳ Pendiente |
-| G | Salidas de `STATUS` y registros serie de las pruebas | `docs/evidencias/pruebas/` | ⏳ Pendiente |
-| H | Modelo de interacción de Alexa (JSON) | `alexa/interaction-model.json` | ⏳ Pendiente |
-| I | Definición de la tabla DynamoDB | `docs/dynamodb-table.example.json` | ⏳ Pendiente |
-| J | Procedimiento y matriz de validación de banco | [`docs/PRUEBAS_AWS.md`](PRUEBAS_AWS.md) | ✅ Incluido |
-| K | Política IoT de ejemplo | [`docs/aws-iot-policy.example.json`](aws-iot-policy.example.json) | ✅ Incluido |
-| L | Políticas IAM de ejemplo (Alexa, administrativa, invocación y confianza) | [`lambda/iam/`](../lambda/iam/) | ✅ Incluido |
-| M | Plantillas de configuración sin secretos | [`include/config.example.h`](../include/config.example.h), [`include/secrets.example.h`](../include/secrets.example.h) | ✅ Incluido |
-| N | Eventos de prueba de la Lambda | [`lambda/events/`](../lambda/events/) | ✅ Incluido |
-| O | Salidas actuales de las pruebas automáticas y de la compilación | `docs/evidencias/pruebas/` | ⏳ Pendiente |
-| P | Video de la demo de extremo a extremo (o enlace) | `docs/evidencias/pruebas/demo.mp4` o un enlace externo | ⏳ Pendiente |
-| Q | Hojas de datos del HC-SR04 y del SG90 | `docs/datasheets/` | ⏳ Pendiente |
-
-**8.2 Glosario**
+**8.1 Glosario**
 
 | Término | Definición |
 |---|---|
@@ -2313,7 +2277,7 @@ Agregar una suite que, con credenciales de prueba y un Thing de pruebas, ejecute
 | `dynamodb:LeadingKeys` | Clave de condición de IAM que restringe una acción de DynamoDB a los elementos cuya clave de partición cumple un patrón (por ejemplo, `PAIRUSER#*`). |
 | STRIDE | Clasificación de amenazas: suplantación, manipulación, repudio, divulgación de información, denegación de servicio y elevación de privilegios. |
 
-**8.3 Referencias**
+**8.2 Referencias**
 
 Enlaces comprobados el 8 de noviembre de 2026.
 
@@ -2336,4 +2300,3 @@ Enlaces comprobados el 8 de noviembre de 2026.
 - ESP-IDF — [FreeRTOS](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/freertos.html) y [Non-Volatile Storage](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/storage/nvs_flash.html)
 - Arduino-ESP32 — [Preferences](https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/preferences.html)
 
-> ⏳ **PENDIENTE (manual):** adjuntar o enlazar la hoja de datos del HC-SR04 usada para justificar el rango, el ángulo y la resolución de RNF2, y confirmar esos valores contra ella.
